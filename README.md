@@ -14,4 +14,4 @@ You can find more information on installing Ruby and using rake tasks to simplif
 
 ## License
 
-AppTemplate is released under the MIT license.  See the file LICENSING for the full text.
+AppTemplate is released under the MIT license.  See the file LICENSE for the full text.
