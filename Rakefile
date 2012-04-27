@@ -1,5 +1,6 @@
-# Copyright (c) 2002-2012  Rally Software Development Corp. All rights reserved.
 require 'fileutils'
+
+DISABLE_JSLINT = ENV['DISABLE_JSLINT'] == 'true'
 
 task :default => [:debug,:build]
 
@@ -30,21 +31,28 @@ task :clean do
   remove_files Rally::AppSdk::AppTemplateBuilder.get_auto_generated_files
 end
 
-desc "Run jslint on all JavaScript files used by this app"
+desc "Run jslint on all JavaScript files used by this app, can be disabled by setting DISABLE_JSLINT=true."
 task :jslint do |t|
-  Dir.chdir(Rake.original_dir)
+  unless DISABLE_JSLINT
+    Dir.chdir(Rake.original_dir)
 
-  config = get_config_from_file
-  files_to_run = config.javascript
-  options = { :browser => true, :predef => ['Rally', 'Ext'], :nomen => false, :onevar => false, :plusplus => false }
-
-  Rally::Jslint.run_jslint(files_to_run, options)
+    config = get_config_from_file
+    files_to_run = config.javascript
+    options = {
+        "browser" => true,
+        "predef" => ["Rally", "Ext"],
+        "nomen" => false,
+        "onevar" => false,
+        "plusplus" => false
+    }
+    Rally::Jslint.run_jslint(files_to_run, options)
+  end
 end
 
 module Rally
   module AppSdk
 
-    ## Builds the JSON config file as well as the JavaScript, CSS, and HTML
+    ## Builds the RallyJson config file as well as the JavaScript, CSS, and HTML
     ## template files.
     class AppTemplateBuilder
 
@@ -70,16 +78,18 @@ module Rally
         @config.css = CSS_FILE
         @config.class_name = CLASS_NAME
 
-        create_file_from_template CONFIG_FILE, CONFIG_TPL
-        create_file_from_template JAVASCRIPT_FILE, JAVASCRIPT_TPL, { :escape => true }
-        create_file_from_template CSS_FILE, CSS_TPL
+        create_file_from_template CONFIG_FILE, Rally::AppTemplates::CONFIG_TPL
+        create_file_from_template JAVASCRIPT_FILE, Rally::AppTemplates::JAVASCRIPT_TPL, { :escape => true }
+        create_file_from_template CSS_FILE, Rally::AppTemplates::CSS_TPL
       end
 
-      def build_app_html(debug = false)
+      def build_app_html(debug = false, file = nil)
         @config.validate
 
-        file = debug ? HTML_DEBUG : HTML
-        template = debug ? HTML_DEBUG_TPL : HTML_TPL
+        if file.nil?
+          file = debug ? HTML_DEBUG : HTML
+        end
+        template = debug ? Rally::AppTemplates::HTML_DEBUG_TPL : Rally::AppTemplates::HTML_TPL
         template = populate_template_with_resources(template,
                                                     "JAVASCRIPT_BLOCK",
                                                     @config.javascript,
@@ -95,6 +105,11 @@ module Rally
                                                     2)
 
         create_file_from_template file, template, { :debug => debug, :escape => true }
+      end
+
+      def generate_js_inline_block
+        template = populate_template_with_resources(Rally::AppTemplates::JAVASCRIPT_INLINE_BLOCK_TPL, "JAVASCRIPT_BLOCK", @config.javascript, false, nil, 3)
+        replace_placeholder_variables template, {}
       end
 
       private
@@ -179,11 +194,11 @@ module Rally
           raise Exception.new("Could not find #{config_file}.  Did you run 'rake new[\"App Name\"]'?")
         end
 
-        name = Rally::JSON.get(config_file, "name")
-        sdk_version = Rally::JSON.get(config_file, "sdk")
-        class_name = Rally::JSON.get(config_file, "className")
-        javascript = Rally::JSON.get_array(config_file, "javascript")
-        css = Rally::JSON.get_array(config_file, "css")
+        name = Rally::RallyJson.get(config_file, "name")
+        sdk_version = Rally::RallyJson.get(config_file, "sdk")
+        class_name = Rally::RallyJson.get(config_file, "className")
+        javascript = Rally::RallyJson.get_array(config_file, "javascript")
+        css = Rally::RallyJson.get_array(config_file, "css")
 
         config = Rally::AppSdk::AppConfig.new(name, sdk_version)
         config.javascript = javascript
@@ -248,6 +263,7 @@ module Rally
       puts "Running jslint..."
 
       begin
+        require 'rubygems'
         require 'jslint-v8'
       rescue Exception
         puts "In order to run jslint, you will need to install the 'jslint-v8' Ruby gem.\n" +
@@ -277,7 +293,7 @@ module Rally
   end
 
   ## Pure (very simple) Ruby JSON implementation
-  module JSON
+  module RallyJson
     class << self
 
       def get(file, key)
@@ -329,6 +345,93 @@ module Rally
 
     end
   end
+
+  module AppTemplates
+    ## Templates
+    JAVASCRIPT_TPL = <<-END
+Ext.define('CLASS_NAME', {
+    extend: 'Rally.app.App',
+    componentCls: 'app',
+
+    launch: function() {
+        //Write app code here
+    }
+});
+    END
+
+    JAVASCRIPT_INLINE_BLOCK_TPL = <<-END
+JAVASCRIPT_BLOCK
+            Rally.launchApp('CLASS_NAME', {
+                name: 'APP_NAME'
+            });
+    END
+
+    HTML_DEBUG_TPL = <<-END
+<!DOCTYPE html>
+<html>
+<head>
+    <title>APP_TITLE</title>
+
+    <script type="text/javascript" src="APP_SDK_PATH"></script>
+
+    <script type="text/javascript">
+        Rally.onReady(function() {
+            Rally.loadScripts([
+                JAVASCRIPT_BLOCK
+            ], function() {
+                Rally.launchApp('CLASS_NAME', {
+                    name: 'APP_NAME'
+                })
+            }, true);
+        });
+    </script>
+
+STYLE_BLOCK
+</head>
+<body></body>
+</html>
+    END
+
+    HTML_TPL = <<-END
+<!DOCTYPE html>
+<html>
+<head>
+    <title>APP_TITLE</title>
+
+    <script type="text/javascript" src="APP_SDK_PATH"></script>
+
+    <script type="text/javascript">
+        Rally.onReady(function() {
+#{JAVASCRIPT_INLINE_BLOCK_TPL}        });
+    </script>
+
+    <style type="text/css">
+STYLE_BLOCK    </style>
+</head>
+<body></body>
+</html>
+    END
+
+    CONFIG_TPL = <<-END
+{
+    "name": "APP_READABLE_NAME",
+    "className": "CustomApp",
+    "sdk": "APP_SDK_VERSION",
+    "javascript": [
+        DEFAULT_APP_JS_FILE
+    ],
+    "css": [
+        DEFAULT_APP_CSS_FILE
+    ]
+}
+    END
+
+    CSS_TPL = <<-END
+.app {
+     /* Add app styles here */
+}
+    END
+  end
 end
 
 ## Helpers
@@ -350,86 +453,3 @@ end
 def sanitize_string(value)
   value.gsub(/[^a-zA-Z0-9 \-_\.']/, "")
 end
-
-## Templates
-JAVASCRIPT_TPL = <<-END
-Ext.define('CLASS_NAME', {
-    extend: 'Rally.app.App',
-    componentCls: 'app',
-
-    launch: function() {
-        //Write app code here
-    }
-});
-END
-
-HTML_DEBUG_TPL = <<-END
-<!DOCTYPE html>
-<html>
-<head>
-    <title>APP_TITLE</title>
-
-    <script type="text/javascript" src="APP_SDK_PATH"></script>
-
-    <script type="text/javascript">
-        Rally.onReady(function() {
-            Rally.loadScripts([
-                JAVASCRIPT_BLOCK
-            ], function() {
-                Rally.launchApp('CLASS_NAME', {
-                    name: 'APP_NAME'
-                })
-            });
-        });
-    </script>
-
-STYLE_BLOCK
-</head>
-<body></body>
-</html>
-END
-
-HTML_TPL = <<-END
-<!DOCTYPE html>
-<html>
-<head>
-    <title>APP_TITLE</title>
-
-    <script type="text/javascript" src="APP_SDK_PATH"></script>
-
-    <script type="text/javascript">
-        Rally.onReady(function() {
-JAVASCRIPT_BLOCK
-            Rally.launchApp('CLASS_NAME', {
-                name: 'APP_NAME'
-            });
-        });
-    </script>
-
-    <style type="text/css">
-STYLE_BLOCK    </style>
-</head>
-<body></body>
-</html>
-END
-
-
-CONFIG_TPL = <<-END
-{
-    "name": "APP_READABLE_NAME",
-    "className": "CustomApp",
-    "sdk": "APP_SDK_VERSION",
-    "javascript": [
-        DEFAULT_APP_JS_FILE
-    ],
-    "css": [
-        DEFAULT_APP_CSS_FILE
-    ]
-}
-END
-
-CSS_TPL = <<-END
-.app {
-     /* Add app styles here */
-}
-END
