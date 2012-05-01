@@ -3,32 +3,65 @@ Ext.define('Iterations', {
     componentCls: 'app',
 
     launch: function() {
-    	
-    	var tree = Ext.widget('rallytree', {
-	    topLevelModel: 'PortfolioItem',
+    	this.buildReleaseComboBox();
+    },
+
+    buildTree: function(){
+
+	if(this.tree){
+	    this.tree.destroy();
+	}
+
+	var selectedRelease = this.combobox.getRecord();
+
+	this.tree = Ext.widget('rallytree', {
+	    topLevelModel: 'Iteration',
+
+	    topLevelStoreConfig: {
+		filters: [
+		    {
+		        property: 'StartDate',
+		        value: selectedRelease.raw.ReleaseStartDate,
+		        operator: '>='
+		   },
+		   {
+		        property: 'EndDate',
+		        value: selectedRelease.raw.ReleaseDate,
+		        operator: '<='
+		   }
+		],
+		sorters: []
+	    },
 
 	    childModelTypeForRecordFn: function(record){
-	    	if(record.get('Children') && record.get('Children').length > 0){
-		    return 'PortfolioItem';
-		} else if(record.get('UserStories') && record.get('UserStories').length > 0){
-		   return 'UserStory';
-		}
+	    	return 'UserStory';
             	
        	    },
             parentAttributeForChildRecordFn: function(record){
-                if(record.get('Children') && record.get('Children').length > 0){
-		    return 'Parent';
-		} else if(record.get('UserStories') && record.get('UserStories').length > 0){
-		   return 'PortfolioItem';
-		}
+                return 'Iteration';
             },
             canExpandFn: function(record){
-            	return (record.get('Children') && record.get('Children').length > 0) 
-		|| (record.get('UserStories') && record.get('UserStories').length > 0);
+	    	if(record.get('_type') === 'iteration'){
+		    return true;
+		}
+            	
             }
 	    
 	});
 
-	this.add(tree);
+	this.add(this.tree);
+    },
+
+    buildReleaseComboBox: function(){
+	this.combobox = Ext.widget('rallyreleasecombobox', {
+	    listeners: {
+		ready: this.buildTree,
+		select: this.buildTree,
+		scope: this
+	    }
+	});
+
+	this.add(this.combobox);
     }
+
 });
