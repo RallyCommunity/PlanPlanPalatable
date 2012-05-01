@@ -6,6 +6,7 @@ Ext.define('Hier', {
     	
     	var tree = Ext.widget('rallytree', {
 	    topLevelModel: 'PortfolioItem',
+	    enableDragAndDrop: true,
 
 	    childModelTypeForRecordFn: function(record){
 	    	if(record.get('Children') && record.get('Children').length > 0){
@@ -25,7 +26,10 @@ Ext.define('Hier', {
             canExpandFn: function(record){
             	return (record.get('Children') && record.get('Children').length > 0) 
 		|| (record.get('UserStories') && record.get('UserStories').length > 0);
-            }
+            },
+            dragThisGroupOnMeFn: function(record){
+                return false;
+	    }
 	    
 	});
 

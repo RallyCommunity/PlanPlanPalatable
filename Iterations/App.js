@@ -16,6 +16,7 @@ Ext.define('Iterations', {
 
 	this.tree = Ext.widget('rallytree', {
 	    topLevelModel: 'Iteration',
+	    enableDragAndDrop: true,
 
 	    topLevelStoreConfig: {
 		filters: [
@@ -54,6 +55,14 @@ Ext.define('Iterations', {
 
     buildReleaseComboBox: function(){
 	this.combobox = Ext.widget('rallyreleasecombobox', {
+
+	   storeConfig: {
+		sorters: [{
+		  property: 'ReleaseStartDate',
+		  direction: 'asc'
+	         }]
+	    },
+
 	    listeners: {
 		ready: this.buildTree,
 		select: this.buildTree,
