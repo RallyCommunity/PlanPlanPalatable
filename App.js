@@ -3,6 +3,32 @@ Ext.define('Hier', {
     componentCls: 'app',
 
     launch: function() {
-       this.add({xtype: 'rallytree'});
+    	
+    	var tree = Ext.widget('rallytree', {
+	    topLevelModel: 'PortfolioItem',
+
+	    childModelTypeForRecordFn: function(record){
+	    	if(record.get('Children') && record.get('Children').length > 0){
+		    return 'PortfolioItem';
+		} else if(record.get('UserStories') && record.get('UserStories').length > 0){
+		   return 'UserStory';
+		}
+            	
+       	    },
+            parentAttributeForChildRecordFn: function(record){
+                if(record.get('Children') && record.get('Children').length > 0){
+		    return 'Parent';
+		} else if(record.get('UserStories') && record.get('UserStories').length > 0){
+		   return 'PortfolioItem';
+		}
+            },
+            canExpandFn: function(record){
+            	return (record.get('Children') && record.get('Children').length > 0) 
+		|| (record.get('UserStories') && record.get('UserStories').length > 0);
+            }
+	    
+	});
+
+	this.add(tree);
     }
 });
