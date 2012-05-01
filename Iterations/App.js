@@ -2,19 +2,85 @@ Ext.define('Iterations', {
     extend: 'Rally.app.App',
     componentCls: 'app',
 
+    layout: 'hbox',
+
+    items: [
+    	{
+	    xtype: 'container',
+	    cls: 'leftSide',
+	    itemId: 'leftSide',
+	    flex: 1
+	},
+	{
+	    xtype: 'container',
+	    cls: 'rightSide',
+	    itemId: 'rightSide',
+	    flex: 1
+	}
+    ],
+
     launch: function() {
+        this.buildStoryTree();
     	this.buildReleaseComboBox();
     },
 
-    buildTree: function(){
+    buildStoryTree: function(){
+	var tree = Ext.widget('rallytree', {
+	    topLevelModel: 'PortfolioItem',
+	    enableDragAndDrop: true,
 
-	if(this.tree){
-	    this.tree.destroy();
+	    /*
+	    TODO: Fix this defect, but it should work!
+	    childItemsStoreConfig: {
+		filters: [
+		    {
+		        property: 'Iteration',
+		        value: 'null',
+		        operator: '='
+		   }
+		],
+		sorters: []
+	    },
+	    */
+
+	    childModelTypeForRecordFn: function(record){
+	    	if(record.get('Children') && record.get('Children').length > 0){
+		    return 'PortfolioItem';
+		} else if(record.get('UserStories') && record.get('UserStories').length > 0){
+		   return 'UserStory';
+		}
+            	
+       	    },
+            parentAttributeForChildRecordFn: function(record){
+                if(record.get('Children') && record.get('Children').length > 0){
+		    return 'Parent';
+		} else if(record.get('UserStories') && record.get('UserStories').length > 0){
+		   return 'PortfolioItem';
+		}
+            },
+            canExpandFn: function(record){
+            	return (record.get('Children') && record.get('Children').length > 0) 
+		|| (record.get('UserStories') && record.get('UserStories').length > 0);
+            },
+            dragThisGroupOnMeFn: function(record){
+                return false;
+	    }
+	    
+	});
+
+	this.down('#leftSide').add(tree);
+
+    },
+
+    buildIterationTree: function(){
+
+	if(this.iterationTree){
+	    this.iterationTree.destroy();
 	}
 
-	var selectedRelease = this.combobox.getRecord();
+	var selectedRelease = this.releaseCombobox.getRecord();
 
-	this.tree = Ext.widget('rallytree', {
+	this.iterationTree = Ext.widget('rallytree', {
 	    topLevelModel: 'Iteration',
 	    enableDragAndDrop: true,
 
@@ -46,15 +112,20 @@ Ext.define('Iterations', {
 		    return true;
 		}
             	
-            }
+            },
+	    dragThisGroupOnMeFn: function(record){
+                if(record.get('_type') === 'iteration'){
+		    return 'hierarchicalrequirement';
+		}
+	    }
 	    
 	});
 
-	this.add(this.tree);
+	this.down('#rightSide').add(this.iterationTree);
     },
 
     buildReleaseComboBox: function(){
-	this.combobox = Ext.widget('rallyreleasecombobox', {
+	this.releaseCombobox = Ext.widget('rallyreleasecombobox', {
 
 	   storeConfig: {
 		sorters: [{
@@ -64,13 +135,13 @@ Ext.define('Iterations', {
 	    },
 
 	    listeners: {
-		ready: this.buildTree,
-		select: this.buildTree,
+		ready: this.buildIterationTree,
+		select: this.buildIterationTree,
 		scope: this
 	    }
 	});
 
-	this.add(this.combobox);
+	this.down('#rightSide').add(this.releaseCombobox);
     }
 
 });
