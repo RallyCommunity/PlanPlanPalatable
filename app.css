@@ -3,7 +3,7 @@ body {
 }
 
 .app {
-    margin: 10px;
+    margin: 10px 30px;
 }
 
 .app > .leftSide {
@@ -30,4 +30,12 @@ h1 {
 .percentDoneContainer {
     height: 15px;
     line-height: 15px;
+}
+
+.planEstimate {
+    width: 20px;
+    height: 20px;
+    border: 1px dotted #5C9ACB;
+    text-align: center;
+    margin-right: 4px;
 }

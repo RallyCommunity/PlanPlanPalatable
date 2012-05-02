@@ -144,11 +144,13 @@ Ext.define('PlanIterationsAndReleases.IterationsAndReleases', {
                         canDropOnMe: true,
                         expanded: true
                     };
-                } else {
+                }
+                
+                if(record.get('_type') === 'hierarchicalrequirement'){
                     return {
-                        xtype: 'rallytreeitem',
+                        xtype: 'rallystorytreeitem',
                         canDrag: true
-                    }
+                    };
                 }
                 
             },

@@ -58,7 +58,7 @@ Ext.define('PlanIterationsAndReleases.IterationTreeItem', {
                     if(percent > .8){
                         return '#FBEDCA';
                     }
-                    return '#B5D8EB';
+                    return '#5C9ACB';
                 },
                 displayValue: function(recordData){
                     return recordData.PlanEstimateRollup + '/' + recordData.Resources;
