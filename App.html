@@ -818,7 +818,12 @@
                             },
                             getCapacity: function(){
                                 return '';
-                                //return Ext.isDefined(me.getRecord().get('UserIterationCapacities'))? me.getRecord().render('UserIterationCapacities'): '';
+                                //TODO - we don't have rollup info about the stories in this iteration on the response.
+                                var resources = me.getRecord().get('Resources');
+                                if(resources == 0){
+                                    return '';
+                                }
+                                return resources;
                             }
                         }
                     );
@@ -832,6 +837,16 @@
                 
                 initComponent: function(){
                     this.callParent(arguments);
+                    this.add({
+                        xtype: 'component',
+                        autoEl: 'h1',
+                        html: 'Unscheduled Story Hierarchy'
+                    });
+                    this.add({
+                        xtype: 'component',
+                        cls: 'grayLabel',
+                        html: 'Drill down to see unscheduled leaf user stories. Drag and drop into an iteration on the right.'
+                    });
                     this.buildTree();
                 },
                 
@@ -903,6 +918,11 @@
                 
                 initComponent: function(){
                     this.callParent(arguments);
+                    this.add({
+                        xtype: 'component',
+                        autoEl: 'h1',
+                        html: 'Releases and Iterations'
+                    });
                     this.buildReleaseComboBox();
                 },
                 
@@ -921,13 +941,35 @@
                         },
             
                         listeners: {
-                            ready: this.buildIterationTree,
-                            select: this.buildIterationTree,
+                            ready: this.releaseSelected,
+                            select: this.releaseSelected,
                             scope: this
                         }
                     });
             
                     this.add(this.releaseCombobox);
+                    this.add({
+                        xtype: 'component',
+                        itemId: 'releaseLabel',
+                        cls: 'grayLabel'
+                    });
+                },
+                
+                releaseSelected: function(){
+                    this.updateLabel();
+                    this.buildIterationTree();
+                },
+                
+                updateLabel: function(){
+                    var release = this.releaseCombobox.getRecord();
+                    var startDate = moment(release.get('ReleaseStartDate')).format('MMMM Do YYYY');
+                    var endDate = moment(release.get('ReleaseDate')).format('MMMM Do YYYY');
+                    var tpl = Ext.create('Ext.XTemplate', 'Showing iterations that begin or end within this release ({StartDate} - {EndDate})')
+                    this.down('#releaseLabel').update(tpl.apply({
+                        Name: release.get('Name'),
+                        StartDate: startDate,
+                        EndDate: endDate
+                    }));
                 },
                 
                 buildIterationTree: function(){
@@ -1026,8 +1068,14 @@
                 ],
             
                 launch: function() {
-                    this.buildStoryTree();
-                    this.buildIterationsAndReleases();
+                    Rally.loadScripts([
+                        'https://raw.github.com/timrwood/moment/1.6.1/min/moment.min.js'
+                    ], Ext.bind(function(){
+                        this.buildStoryTree();
+                        this.buildIterationsAndReleases();
+                    }, this));
+                    
+                    
                 },
             
                 buildStoryTree: function(){
@@ -1049,6 +1097,9 @@
     </script>
 
     <style type="text/css">
+        body {
+            overflow-y: auto !important;
+        }
         
         .app {
             margin: 10px;
@@ -1062,6 +1113,16 @@
         .app > .rightSide {
             float: right;
             width: 45%;
+        }
+        
+        h1 {
+            font-size: 14px;
+            margin: 5px;
+        }
+        
+        .grayLabel {
+            color: #888;
+            margin: 5px 15px;
         }    </style>
 </head>
 <body></body>
