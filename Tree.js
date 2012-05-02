@@ -453,7 +453,7 @@
             var childStore = Ext.create('Rally.data.WsapiDataStore', storeConfig);
 
             childStore.on('load', function(store, records){
-                this.drawItems(records, parentTreeItem);
+                this.drawItems(Ext.clone(records), parentTreeItem);
             }, this);
 
             childStore.load();

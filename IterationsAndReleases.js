@@ -8,7 +8,25 @@ Ext.define('PlanIterationsAndReleases.IterationsAndReleases', {
             autoEl: 'h1',
             html: 'Releases and Iterations'
         });
-        this.buildReleaseComboBox();
+        
+        this.enhanceIterationModel();
+    },
+    
+    enhanceIterationModel: function(){
+        Rally.data.ModelFactory.getModel({
+            type: 'Iteration',
+            success: function(model){
+                this.enhancedIterationModel = Ext.define('EnhancedIterationModel', {
+                    extend: model,
+                    fields: [
+                        {name: 'PlanEstimateRollup', type: 'int', defaultValue: 0}
+                    ]
+                });
+                
+                this.buildReleaseComboBox();
+            },
+            scope: this
+        });
     },
     
     buildReleaseComboBox: function(){
@@ -88,7 +106,7 @@ Ext.define('PlanIterationsAndReleases.IterationsAndReleases', {
         var filter = startDateFilter.or(endDateFilter);
 
         this.iterationTree = Ext.widget('rallytree', {
-            topLevelModel: 'Iteration',
+            topLevelModel: this.enhancedIterationModel,
             enableDragAndDrop: true,
 
             topLevelStoreConfig: {
@@ -128,11 +146,50 @@ Ext.define('PlanIterationsAndReleases.IterationsAndReleases', {
                     }
                 }
                 
-            }
+            },
+            
+            childItemsStoreConfigForParentRecordFn: function(record){
+                return {
+                    listeners: {
+                        load: function(store, records){
+                            this.updateRollupOnIterations(records);
+                        },
+                        scope: this
+                    }
+                };
+            },
+            scope: this
         
         });
 
         this.add(this.iterationTree);
+    },
+    
+    updateRollupOnIterations: function(records){
+        if(records.length === 0){
+            return;
+        }
+        
+        //find the iteration tree item for the records
+        var iterationTreeItem;
+        Ext.each(this.query('rallyiterationtreeitem'), function(treeItem){
+            if(treeItem.getRecord().get('_ref') === records[0].get('Iteration')._ref){
+                iterationTreeItem = treeItem;
+            }
+        });
+
+        //rollup plan estimate
+        var planEstimateRollup = 0;
+        Ext.each(records, function(record){
+            planEstimateRollup += record.get('PlanEstimate');
+        });
+        
+        //update iteration
+        iterationTreeItem.getRecord().set('PlanEstimateRollup', planEstimateRollup);
+        
+        //redraw iteration
+        iterationTreeItem.draw();
+        
     }
     
 });
