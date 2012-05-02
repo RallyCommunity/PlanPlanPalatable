@@ -3,9 +3,11 @@
     "className": "PlanIterationsAndReleases.App",
     "sdk": "2.0p",
     "javascript": [
-		"Tree.js",
-		"StoryTree.js",
-		"IterationsAndReleases.js",
+		"TreeItem.js",
+        "Tree.js",
+		"IterationTreeItem.js",
+        "StoryTree.js",
+        "IterationsAndReleases.js",
         "App.js"
     ],
     "css": [

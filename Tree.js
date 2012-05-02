@@ -279,8 +279,13 @@
             /**
              * @cfg {Object}
              * Config for the store used to fetch the lower level items in the hierarchy
+             * Can change depending on what type of children are being loaded.
+             * E.g., to show portfolio items and only the associated user stories that are not
+             * in an iteration, you would need to add an Iteration filter only for stories, not portfolio items.
              */
-            childItemsStoreConfig: {},
+            childItemsStoreConfigForParentRecordFn: function(){
+                return {};
+            },
             
             
             /**
@@ -340,8 +345,6 @@
                     this.drawEmptyMsg();
                 }
 
-                this.publish(Rally.Message.treeLoaded);
-
             }, this);
 
             store.load();
@@ -362,45 +365,55 @@
          * @param parentTreeItem (Optional) add the items as a child to a different Rally.ui.tree.TreeItem
          */
         drawItems: function(records, parentTreeItem){
-            var tree = this;
 
-            Ext.each(records, function(record){
-                
-                var treeItemConfig = tree.getTreeItemConfigForRecordFn().call(tree.getScope(), record);
-                treeItemConfig = Ext.applyIf(treeItemConfig, {
-                    record: record,
-                    canExpandFn: this.getCanExpandFn(),
-                    scope: this.getScope(),
-                    canDragAndDrop: this.getEnableDragAndDrop(),
-                    listeners: {
-                        expand: this.expandItem,
-                        collapse: this.collapseItem,
-                        scope: this
-                    }
-                });
-                
-                var treeItem = Ext.ComponentManager.create(treeItemConfig);
-                
-                if(this.getEnableDragAndDrop()){
-                    treeItem.on('draw', function(){
-                        this.makeTreeItemDraggable(treeItem);
-                    }, this);
-                }
+            var deferAddChild = function(record){
+                this._drawTreeItem(record, parentTreeItem);
 
-                if(parentTreeItem){
-                    treeItem.setParentTreeItem(parentTreeItem);
-                    Ext.defer(function(){
-                        parentTreeItem.addChildItem(treeItem);
-                    }, 1);
+                if(records.length > 0){
+                    Ext.defer(deferAddChild, 1, this, [records.shift()]);
                 } else {
-                    Ext.defer(function(){
-                        tree.add(treeItem);
-                    }, 1);
-
+                    this.publish(Rally.Message.treeLoaded);
                 }
+            };
 
-            }, this);
+            if(records.length > 0){
+                deferAddChild.call(this, records.shift());
+            }
+            
 
+        },
+
+        _drawTreeItem: function(record, parentTreeItem){
+            var treeItemConfig = this.getTreeItemConfigForRecordFn().call(this.getScope(), record);
+            treeItemConfig = treeItemConfig || {};
+            
+            treeItemConfig = Ext.applyIf(treeItemConfig, {
+                xtype: 'rallytreeitem',
+                record: record,
+                canExpandFn: this.getCanExpandFn(),
+                scope: this.getScope(),
+                canDragAndDrop: this.getEnableDragAndDrop(),
+                listeners: {
+                    expand: this.expandItem,
+                    collapse: this.collapseItem,
+                    scope: this
+                }
+            });
+            
+            var treeItem = Ext.ComponentManager.create(treeItemConfig);
+
+            if(this.getEnableDragAndDrop()){
+                treeItem.on('draw', function(){
+                    this.makeTreeItemDraggable(treeItem);
+                }, this);
+            }
+
+            if(parentTreeItem){
+                treeItem.setParentTreeItem(parentTreeItem);
+                parentTreeItem.addChildItem(treeItem);
+            } else {
+                this.add(treeItem);
+            }
         },
 
         /**
@@ -413,7 +426,10 @@
             var childModelType = this.getChildModelTypeForRecordFn().call(this.getScope(), parentTreeItem.getRecord());
             var parentAttribute = this.getParentAttributeForChildRecordFn().call(this.getScope(), parentTreeItem.getRecord());
 
-            var storeConfig = Ext.applyIf(Ext.clone(this.getChildItemsStoreConfig()), {
+            var storeConfig = this.getChildItemsStoreConfigForParentRecordFn().call(this.getScope(), parentTreeItem.getRecord());
+            storeConfig = storeConfig || {};
+
+            storeConfig = Ext.applyIf(storeConfig, {
                 model: childModelType,
                 filters: [
                     {
@@ -432,6 +448,7 @@
                     project: undefined
                 }
             });
+            
 
             var childStore = Ext.create('Rally.data.WsapiDataStore', storeConfig);
 
@@ -446,31 +463,35 @@
         makeTreeItemDraggable: function(treeItem){
             var tree = this;
 
-            var dragSource = Ext.create('Ext.dd.DragSource', treeItem.getEl(), {
-                treeItem: treeItem,
-                ddGroup: this.getDragDropGroupFn().call(this.getScope(), treeItem.getRecord()),
-                isTarget: false,
-                proxy: Ext.create('Ext.dd.StatusProxy', {
-                    animRepair: true,
-                    shadow: false,
-                    dropNotAllowed: 'rallytree-proxy'
-                })
-            });
+            if(treeItem.getCanDrag()){
+                var dragSource = Ext.create('Ext.dd.DragSource', treeItem.getEl(), {
+                    treeItem: treeItem,
+                    ddGroup: this.getDragDropGroupFn().call(this.getScope(), treeItem.getRecord()),
+                    isTarget: false,
+                    proxy: Ext.create('Ext.dd.StatusProxy', {
+                        animRepair: true,
+                        shadow: false,
+                        dropNotAllowed: 'rallytree-proxy'
+                    })
+                });
 
-            dragSource.setHandleElId(treeItem.getEl().down('.drag').id);
-
-            var dropTarget = Ext.create('Rally.ui.tree.TreeItemDropTarget', treeItem.down('#pill').getEl().down('div'), {
-                tree: tree,
-                treeItem: treeItem
-            });
-
-            var dropTargetGroups = this.getDragThisGroupOnMeFn().call(this.getScope(), treeItem.getRecord());
-            if(!Ext.isArray(dropTargetGroups)){
-                dropTargetGroups = [dropTargetGroups];
+                dragSource.setHandleElId(treeItem.getEl().down('.drag').id);
             }
-            Ext.each(dropTargetGroups, function(dropTargetGroup){
-                dropTarget.addToGroup(dropTargetGroup);
-            });
+            
+            if(treeItem.getCanDropOnMe()){
+                var dropTarget = Ext.create('Rally.ui.tree.TreeItemDropTarget', treeItem.down('#pill').getEl().down('div'), {
+                    tree: tree,
+                    treeItem: treeItem
+                });
+
+                var dropTargetGroups = this.getDragThisGroupOnMeFn().call(this.getScope(), treeItem.getRecord());
+                if(!Ext.isArray(dropTargetGroups)){
+                    dropTargetGroups = [dropTargetGroups];
+                }
+                Ext.each(dropTargetGroups, function(dropTargetGroup){
+                    dropTarget.addToGroup(dropTargetGroup);
+                });
+            }
 
         },
 
@@ -489,7 +510,6 @@
         collapseItem: function(treeItem){
             treeItem.removeChildItems();
         }
-
 
     });
 

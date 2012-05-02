@@ -1,3 +1,16 @@
+
 .app {
-     /* Add app styles here */
+    margin: 10px auto;
+    width: 960px;
+}
+
+.app > .leftSide {
+    float: left;
+    width: 400px;
+    margin-right: 50px;
+}
+
+.app > .rightSide {
+    float: left;
+    width: 400px;
 }

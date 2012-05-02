@@ -1,157 +1,1069 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Iterations</title>
+    <title>PlanIterationsAndReleases</title>
 
     <script type="text/javascript" src="/apps/2.0p/sdk.js"></script>
 
     <script type="text/javascript">
         Rally.onReady(function() {
-            Ext.define('Iterations', {
-                extend: 'Rally.app.App',
-                componentCls: 'app',
+            (function() {
+                var Ext = window.Ext4 || window.Ext;
             
-                layout: 'hbox',
+                /**
+                 * A TreeItem represents a record in a Rally.ui.tree.Tree.
+                 * It can contain other TreeItems, so a Tree component can build a full hierarchy.
+                 */
+                Ext.define('Rally.ui.tree.TreeItem', {
+                    extend: 'Ext.Container',
+                    requires: ['Ext.XTemplate'],
+                    alias: 'widget.rallytreeitem',
             
-                items: [
-                	{
-            	    xtype: 'container',
-            	    cls: 'leftSide',
-            	    itemId: 'leftSide',
-            	    flex: 1
-            	},
-            	{
-            	    xtype: 'container',
-            	    cls: 'rightSide',
-            	    itemId: 'rightSide',
-            	    flex: 1
-            	}
-                ],
+                    cls: 'treeItem',
             
-                launch: function() {
-                    this.buildStoryTree();
-                	this.buildReleaseComboBox();
+                    items: {
+                        xtype: 'container',
+                        itemId: 'pill'
+                    },
+            
+                    config: {
+                        /**
+                         * @cfg {Rally.domain.WsapiModel}
+                         * The record to draw the item for.
+                         */
+                        record: undefined,
+            
+                        /**
+                         * @cfg {Rally.ui.tree.TreeItem}
+                         * The tree item that contains this tree item
+                         */
+                        parentTreeItem: undefined,
+            
+                        /**
+                         * @cfg {Function}
+                         * A function that returns true if the given record can be expanded
+                         */
+                        canExpandFn: Ext.emptyFn,
+            
+                        /**
+                         * @cfg {Object}
+                         * Scope that any passed in function (canExpandFn, etc) is called with.
+                         */
+                        scope: undefined,
+            
+                        /**
+                         * @cfg {Boolean}
+                         * Whether this item can be dragged onto other tree items to rearrange a hierarchy.
+                         * Reparenting logic occurs at the Tree level, this determines whether to wire up dragging.
+                         */
+                        canDrag: false,
+                        
+                        /**
+                         * @cfg {Boolean}
+                         * Whether this item allows other tree items to be dropped on it to rearrange a hierarchy.
+                         * Reparenting logic occurs at the Tree level, this determines whether to wire up drop logic.
+                         */
+                        canDropOnMe: false,
+            
+                        /**
+                         * @cfg {Boolean}
+                         * The item is expanded or not
+                         */
+                        expanded: false
+                    },
+            
+                    constructor: function(config){
+                        this.initConfig(config);
+                        this.callParent(arguments);
+                    },
+            
+                    initComponent: function(){
+                        this.callParent(arguments);
+            
+                        this.addEvents(
+                                /**
+                                 * @event
+                                 * @param record the record this item represents
+                                 * Tree Item expanded
+                                 */
+                                'expand',
+                                /**
+                                 * @event
+                                 * @param record the record this item represents
+                                 * Tree Item collapsed
+                                 */
+                                'collapse',
+                                /**
+                                 * @event
+                                 * @param treeItem this tree item
+                                 * Tree Item drawn (every time it's drawn)
+                                 */
+                                'draw'
+                        );
+            
+                        this.addCls(Rally.util.Test.toBrowserTestCssClass(this.getRecord().get('ObjectID')));
+            
+                        this.on('afterrender', function(){
+                            this.draw();
+                            
+                            if(this.getExpanded()){
+                                this.fireEvent('expand', this);
+                            }
+                        }, this);
+                        
+                    },
+            
+                    /**
+                     * draws the content of the tree item.
+                     */
+                    draw: function(){
+                        this.down('#pill').update(this.applyRenderTpl());
+                        this.setupListeners();
+                        this.fireEvent('draw');
+                    },
+            
+                    applyRenderTpl: function(){
+                        return this.getExpanderTpl().apply(this.getRenderData()) + this.getPillTpl().apply(this.getRenderData());
+                    },
+            
+                    getExpanderTpl: function(){
+                        var me = this;
+                        return Ext.create('Ext.XTemplate',
+                            '<a href="#" <tpl if="!this.canExpand()">style="display: none" </tpl>class="expander {[this.expandOrCollapse()]}"></a>',
+                            {
+                                canExpand: function(){
+                                    return me.canExpand();
+                                },
+                                expandOrCollapse: function(){
+                                    return me.getExpanded()? 'collapseTriangle': 'expandTriangle';
+                                }
+                            }
+                        );
+                    },
+            
+                    getPillTpl: function(){
+                        var me = this;
+            
+                        return Ext.create('Ext.XTemplate',
+                            '<div class="pill">',
+                                '<tpl if="this.canDrag()"><div class="icon drag"></div></tpl>',
+                                '{[this.getActionsGear()]}',
+                                '<div class="textContent ellipses">{[this.getFormattedId()]} {[this.getType(values)]}{[this.getSeparator()]}{Name}</div>',
+                                '<div class="rightSide">',
+                                    '{[this.getPercentDone(values)]}',
+                                '</div>',
+                            '</div>',
+                            {
+                                canDrag: function(){
+                                    return me.getCanDrag();
+                                },
+                                getActionsGear: function(){
+                                    return '<div class="row-action icon"></div>';
+                                },
+                                getFormattedId: function(){
+                                    return me.getRecord().getField('FormattedID')? me.getRecord().render('FormattedID'): '';
+                                },
+                                getType: function(values){
+                                    return values.PortfolioItemType? '(' + values.PortfolioItemType._refObjectName + ')': '';
+                                },
+                                getPercentDone: function(){
+                                    return Ext.isDefined(me.getRecord().get('PercentDoneByStoryCount'))? me.getRecord().render('PercentDoneByStoryCount'): '';
+                                },
+                                getSeparator: function(){
+                                    return this.getFormattedId()? ' - ': '';
+                                }
+                            }
+                        );
+                    },
+            
+                    /**
+                     * Object passed to the Ext.XTemplate used to render the tree item.
+                     * Defaults to the record's data.
+                     */
+                    getRenderData: function(){
+                        return this.getRecord().data;
+                    },
+            
+                    /**
+                     * Wires up listeners for elements in the tree item.
+                     */
+                    setupListeners: function(){
+            
+                        var pill = this.down('#pill');
+            
+                        var expander = pill.getEl().down('a.expander');
+                        if(expander){
+                            expander.on('click', this.expandOrCollapse, this, {stopEvent: true});
+                        }
+            
+                        pill.getEl().down('.row-action').on('click', this._showActionMenu, this, {stopEvent: true});
+            
+                    },
+            
+                    _showActionMenu : function(){
+            
+                        var rowActions = Rally.ui.grid.RowActionsFactory.get([
+                            Rally.ui.grid.RowActionsFactory.EDIT,
+                            Rally.ui.grid.RowActionsFactory.COPY
+                        ], this.getRecord());
+            
+                        rowActions.push({
+                            text: 'Delete',
+                            handler: Ext.bind(this._deleteRecord, this)
+                        });
+            
+            
+                        var menu = Ext.create('Rally.ui.Menu', {
+                            items: rowActions
+                        });
+            
+                        menu.showBy(this.getEl().down('.row-action'));
+                    },
+            
+                    _deleteRecord: function(){
+                        this.getRecord().destroy({
+                            callback: function(){
+                                this.up('rallytree').removeTreeItem(this);
+                            },
+                            scope: this
+                        });
+                    },
+            
+                    /**
+                     * Expand if collapsed, collapse if expanded.
+                     * Relies on the tree to handle the logic of loading children, so this just sets
+                     * the expanded property and fires the collapse/expand event, which the tree listens to.
+                     */
+                    expandOrCollapse: function(){
+                        this.fireEvent(this.getExpanded()? 'collapse': 'expand', this);
+                        this.setExpanded(!this.getExpanded());
+                        this.draw();
+                    },
+            
+                    /**
+                     * Add a Rally.ui.tree.TreeItem as a child under this TreeItem.
+                     * @param treeItem item to add as a child
+                     */
+                    addChildItem: function(treeItem){
+            
+                        var childrenContainer = this.down('#childItemContainer');
+            
+                        if(!childrenContainer){
+                            childrenContainer = this.add({
+                                xtype: 'container',
+                                itemId: 'childItemContainer',
+                                cls: 'childItemContainer'
+                            });
+                        }
+            
+                        treeItem.on('remove', this.draw, this);
+            
+                        childrenContainer.add(treeItem);
+            
+                    },
+            
+                    /**
+                     * Removes all TreeItem children from under this item.
+                     */
+                    removeChildItems: function(){
+                        if(this.down('#childItemContainer')){
+                            this.down('#childItemContainer').destroy();
+                        }
+                    },
+            
+                    /**
+                     * Whether this tree item can be expanded (has children).
+                     * Depends on the #canExpandFn config option.
+                     * @return {Boolean}
+                     */
+                    canExpand: function(){
+                        return this.getCanExpandFn().call(this.getScope(), this.getRecord());
+                    }
+            
+                });
+            
+            })();            (function() {
+                var Ext = window.Ext4 || window.Ext;
+            
+                /**
+                 * Displays items in a hierarchy.
+                 *
+                 * To create a tree of User Stories and their children, simply create a new tree:
+                 *      @example
+                 *      Ext.create('Ext.Container', {
+                 *         items: [{
+                 *             xtype: 'rallytree'
+                 *         }],
+                 *         renderTo: Ext.getBody().dom
+                 *      });
+                 *
+                 *
+                 * To create a tree of User Stories and their defects, implement a few more config options:
+                 *      @example
+                 *      Ext.create('Ext.Container', {
+                 *         items: [{
+                 *             xtype: 'rallytree',
+                 *             childModelTypeForRecordFn: function(){
+                 *                 return 'Defect';
+                 *             },
+                 *             parentAttributeForChildRecordFn: function(){
+                 *                 return 'Requirement';
+                 *             },
+                 *             canExpandFn: function(record){
+                 *                 return record.get('Defects') && record.get('Defects').length;
+                 *             }
+                 *         }],
+                 *         renderTo: Ext.getBody().dom
+                 *      });
+                 *
+                 * To create a tree of user stories that expands into child user stories if it's an epic story and then shows tasks:
+                 *      @example
+                 *      Ext.create('Ext.Container', {
+                 *          items: [{
+                 *              xtype: 'rallytree',
+                 *              childModelTypeForRecordFn: function(record){
+                 *                  if(record.get('Children') && record.get('Children').length > 0){
+                 *                      return 'User Story';
+                 *                  } else {
+                 *                      return 'Task';
+                 *                  }
+                 *              },
+                 *              parentAttributeForChildRecordFn: function(record){
+                 *                  if(record.get('Children') && record.get('Children').length > 0){
+                 *                      return 'Parent';
+                 *                  } else {
+                 *                      return 'WorkProduct';
+                 *                  }
+                 *              },
+                 *              canExpandFn: function(record){
+                 *                  return (record.get('Children') && record.get('Children').length > 0) || (record.get('Tasks') && record.get('Tasks').length > 0);
+                 *              }
+                 *          }],
+                 *          renderTo: Ext.getBody().dom
+                 *      });
+                 *
+                 *
+                 * To create a project tree:
+                 *      @example
+                 *      Ext.create('Ext.Container', {
+                 *          items: [{
+                 *              xtype: 'rallytree',
+                 *              topLevelModel: 'Project',
+                 *              childModelTypeForRecordFn: function(){
+                 *                  return 'Project';
+                 *              }
+                 *          }],
+                 *          renderTo: Ext.getBody().dom
+                 *      });
+                 *
+                 * ## Drag and Drop
+                 *
+                 * To support drag and drop reparenting, a few config options need to be set:
+                 * #enableDragAndDrop
+                 * #dragThisGroupOnMeFn
+                 *
+                 * The #dragDropGroupFn can also be implemented, but the default is usually enough (defaults to giving the type name, like 'defect', to each row).
+                 *
+                 * By default, the functions are defined to work for a user story hierarchy, so we can just enable drag and drop and it should work:
+                 *      @example
+                 *      Ext.create('Ext.Container', {
+                 *          items: [{
+                 *              xtype: 'rallytree',
+                 *              enableDragAndDrop: true
+                 *          }],
+                 *          renderTo: Ext.getBody().dom
+                 *      });
+                 *
+                 * To support DnD with other types, you need to implement the DnD functions.
+                 * This example allows DnD of Defects under User Stories.
+                 *      @example
+                 *      Ext.create('Ext.Container', {
+                 *          items: [{
+                 *              xtype: 'rallytree',
+                 *              childModelTypeForRecordFn: function(){
+                 *                  return 'Defect';
+                 *              },
+                 *              parentAttributeForChildRecordFn: function(){
+                 *                  return 'Requirement';
+                 *              },
+                 *              canExpandFn: function(record){
+                 *                  return record.get('Defects') && record.get('Defects').length;
+                 *              },
+                 *              enableDragAndDrop: true,
+                 *              dragThisGroupOnMeFn: function(record){
+                 *                  if(record.get('_type') === 'hierarchicalrequirement'){
+                 *                      return 'defect';
+                 *                  }
+                 *              }
+                 *          }],
+                 *          renderTo: Ext.getBody().dom
+                 *      });
+                 *
+                 *
+                 *
+                 * This example shows Test Cases under Test Folders, and lets you DnD to reorganize.
+                 *      @example
+                 *      Ext.create('Ext.Container', {
+                 *          items: [{
+                 *              xtype: 'rallytree',
+                 *              topLevelModel: 'TestFolder',
+                 *              childModelTypeForRecordFn: function(record){
+                 *                  if(record.get('Children') && record.get('Children').length > 0){
+                 *                      return 'TestFolder';
+                 *                  } else {
+                 *                      return 'TestCase';
+                 *                  }
+                 *              },
+                 *              parentAttributeForChildRecordFn: function(record){
+                 *                  if(record.get('Children') && record.get('Children').length > 0){
+                 *                      return 'Parent';
+                 *                  } else {
+                 *                      return 'TestFolder';
+                 *                  }
+                 *              },
+                 *              canExpandFn: function(record){
+                 *                  return record.get('Children') && record.get('Children').length > 0
+                 *                  || record.get('TestCases') && record.get('TestCases').length > 0;
+                 *              },
+                 *              enableDragAndDrop: true,
+                 *              dragThisGroupOnMeFn: function(record){
+                 *                  if(record.get('_type') === 'testfolder'){
+                 *                      if(record.get('Children') && record.get('Children').length > 0){
+                 *                          return 'testfolder';
+                 *                      }
+                 *                      if(record.get('TestCases') && record.get('TestCases').length > 0){
+                 *                          return 'testcase';
+                 *                      }
+                 *                      return ['testfolder', 'testcase'];
+                 *                  }
+                 *              },
+                 *              topLevelStoreConfig: {
+                 *                  sorters: []
+                 *              },
+                 *              childItemsStoreConfig: {
+                 *                  sorters: []
+                 *              }
+                 *          }],
+                 *          renderTo: Ext.getBody().dom
+                 *      });
+                 *
+                 * The first set of options configure the Tree to show Test Folders and Test Cases.
+                 * To enable DnD, #enableDragAndDrop was set to true, and #dragThisGroupOnMeFn was implemented to
+                 * return 'testfolder' or 'testcase', depending on conditions where test folders and/or test cases can be dropped on
+                 * the test folder.
+                 * The store config options were also configured to not sort, since Test Folders and Test Cases are not rankable.
+                 *
+                 */
+                Ext.define('Rally.ui.tree.Tree', {
+                    extend: 'Ext.Container',
+                    requires: ['Ext.XTemplate', 'Rally.ui.tree.TreeItem', 'Rally.ui.tree.TreeItemDropTarget'],
+            
+                    alias: 'widget.rallytree',
+            
+                    mixins: {
+                        recordable: 'Rally.clientmetrics.ClientMetricsRecordable',
+                        messageable: 'Rally.Messageable'
+                    },
+            
+                    cls: 'rallytree',
+            
+                    config: {
+                        /**
+                         * @cfg {String}
+                         * The type of model to load as the top level.
+                         * For example, you could have a tree of user stories and their tasks. The top level model type
+                         * would be 'userstory'.
+                         */
+                        topLevelModel: 'User Story',
+            
+                        /**
+                         * @cfg {String}
+                         * The attribute used to determine if a record is at the top level.
+                         * For example, to show user stories that do not have parent, use 'Parent'.
+                         */
+                        topLevelParentAttribute: 'Parent',
+            
+                        /**
+                         * @cfg {Function}
+                         * Given a record, return the model type (String) of the child records.
+                         * For example, if given a user story record, you could return 'userstory' to create a US hierarchy, or
+                         * 'defect', if you want a tree of User Stories and their defects. Or even return 'userstory' for a user story
+                         * that has sub user stories, but 'defect' if it only has defects.
+                         */
+                        childModelTypeForRecordFn: function(record){
+                            return 'User Story';
+                        },
+            
+                        /**
+                         * @cfg {Function}
+                         * Given a record, return the name of the attribute that connects this record's children to itself.
+                         * For example, if you're building a hierarchy of user stories, this would be 'Parent'. If you're building a
+                         * tree of user stories and their defects, then it would be 'Requirement', since the Requirement attribute on a defect
+                         * describes which user story it belongs to.
+                         */
+                        parentAttributeForChildRecordFn: function(record){
+                            return 'Parent';
+                        },
+            
+                        /**
+                         * @cfg {Function}
+                         * A function that returns true if the given record can be expanded
+                         */
+                        canExpandFn: function(record){
+                            return record.get('Children') && record.get('Children').length > 0;
+                        },
+            
+                        /**
+                         * @cfg {Boolean}
+                         * Whether or not this tree supports drag and drop reparenting.
+                         * If true, must also provide a #dragThisGroupOnMe config function.
+                         */
+                        enableDragAndDrop: false,
+            
+                        /**
+                         * @cfg {Function}
+                         * Required to support drag and drop.
+                         * A function that returns the group name that this record is a member of.
+                         *
+                         * By default, returns the type name of the record, like 'hierarchicalrequirement' for userstories, and 'defect' for defects.
+                         * You will want to change this if type is not specific. For example, you may wish to distinguish accepted user stories from in progress stories.
+                         * Use in conjunction with the #dragThisGroupOnMeFn config to define DnD rules.
+                         */
+                        dragDropGroupFn: function(record){
+                            return record.get('_type');
+                        },
+            
+                        /**
+                         * @cfg {Function}
+                         * Required to support drag and drop.
+                         * A function that returns the group name of records that are able to be dropped on the passed in record.
+                         *
+                         * For example, a tree of user stories would simply return 'hierarchicalrequirement', since
+                         * user stories can always be parented to other user stories. A tree of user stories and defects would need to have 'hierarchicalrequirement'
+                         * for the TreeItems representing user stories, but return undefined for defects so they can't be dropped on.
+                         * @param record the record you need to determine the group for.
+                         * @return a string representing the drag drop group that can be dragged onto the Rally.ui.tree.TreeItem represented by the passed in record.
+                         */
+                        dragThisGroupOnMeFn: function(record){
+                            return record.get('_type');
+                        },
+            
+                        /**
+                         * @cfg {Object}
+                         * Scope that any passed in function (canExpandFn, etc) is called with.
+                         */
+                        scope: undefined,
+            
+                        /**
+                         * @cfg {Object}
+                         * Config for the store used to fetch the top level items in the hierarchy
+                         */
+                        topLevelStoreConfig: {},
+            
+                        /**
+                         * @cfg {Object}
+                         * Config for the store used to fetch the lower level items in the hierarchy
+                         * Can change depending on what type of children are being loaded.
+                         * E.g., to show portfolio items and only the associated user stories that are not
+                         * in an iteration, you would need to add an Iteration filter only for stories, not portfolio items.
+                         */
+                        childItemsStoreConfigForParentRecordFn: function(){
+                            return {};
+                        },
+                        
+                        
+                        /**
+                         * @cfg {Function}
+                         * Given a record, returns the configuration for a tree item to draw for the record.
+                         * Can be used to change how a tree item is rendered at any level.
+                         */
+                        treeItemConfigForRecordFn: function(){
+                            return {
+                                xtype: 'rallytreeitem'
+                            };
+                        }
+                    },
+            
+                    constructor: function(config){
+                        this.initConfig(config);
+                        this.callParent(arguments);
+                    },
+            
+                    initComponent: function(){
+                        this.callParent(arguments);
+            
+                        this.addEvents(
+                                /**
+                                 * @event
+                                 * Fired before a record is saved after a drag and drop event.
+                                 * @param record the record about to be updated
+                                 * @param newParentRecord the record about to be set as the new 'owner' of the record, based on the
+                                 * attribute returned by #parentAttributeForChildRecordFn
+                                 */
+                                'beforerecordsaved'
+                        );
+            
+                        var storeConfig = Ext.applyIf(Ext.clone(this.getTopLevelStoreConfig()), {
+                            model: this.getTopLevelModel(),
+                            filters: [
+                                {
+                                    property: this.getTopLevelParentAttribute(),
+                                    value: 'null',
+                                    operator: '='
+                                }
+                            ],
+                            sorters: [
+                                {
+                                    property: 'Rank',
+                                    direction: 'ASC'
+                                }
+                            ]
+                        });
+            
+                        var store = Ext.create('Rally.data.WsapiDataStore', storeConfig);
+            
+                        store.on('load', function(store, records){
+                            if(records.length > 0){
+                                this.drawItems(records);
+                            } else {
+                                this.drawEmptyMsg();
+                            }
+            
+                        }, this);
+            
+                        store.load();
+            
+                    },
+            
+                    drawEmptyMsg: function(){
+                        var emptyTextMessage = '<p>No top level items found.</p>';
+                        this.add({
+                            xtype: 'component',
+                            html: Rally.ui.grid.EmptyTextFactory.getEmptyTextFor(emptyTextMessage)
+                        });
+                    },
+            
+                    /**
+                     * Adds an item in the tree for each record
+                     * @param records the records to create Rally.ui.tree.TreeItems for
+                     * @param parentTreeItem (Optional) add the items as a child to a different Rally.ui.tree.TreeItem
+                     */
+                    drawItems: function(records, parentTreeItem){
+            
+                        var deferAddChild = function(record){
+                            this._drawTreeItem(record, parentTreeItem);
+            
+                            if(records.length > 0){
+                                Ext.defer(deferAddChild, 1, this, [records.shift()]);
+                            } else {
+                                this.publish(Rally.Message.treeLoaded);
+                            }
+                        };
+            
+                        if(records.length > 0){
+                            deferAddChild.call(this, records.shift());
+                        }
+                        
+            
+                    },
+            
+                    _drawTreeItem: function(record, parentTreeItem){
+                        var treeItemConfig = this.getTreeItemConfigForRecordFn().call(this.getScope(), record);
+                        treeItemConfig = treeItemConfig || {};
+                        
+                        treeItemConfig = Ext.applyIf(treeItemConfig, {
+                            xtype: 'rallytreeitem',
+                            record: record,
+                            canExpandFn: this.getCanExpandFn(),
+                            scope: this.getScope(),
+                            canDragAndDrop: this.getEnableDragAndDrop(),
+                            listeners: {
+                                expand: this.expandItem,
+                                collapse: this.collapseItem,
+                                scope: this
+                            }
+                        });
+                        
+                        var treeItem = Ext.ComponentManager.create(treeItemConfig);
+            
+                        if(this.getEnableDragAndDrop()){
+                            treeItem.on('draw', function(){
+                                this.makeTreeItemDraggable(treeItem);
+                            }, this);
+                        }
+            
+                        if(parentTreeItem){
+                            treeItem.setParentTreeItem(parentTreeItem);
+                            parentTreeItem.addChildItem(treeItem);
+                        } else {
+                            this.add(treeItem);
+                        }
+                    },
+            
+                    /**
+                     * Given a Rally.ui.tree.TreeItem, load its child items.
+                     * Assumes this TreeItem has children.
+                     * @param parentTreeItem tree item to load children for.
+                     */
+                    drawChildItems: function(parentTreeItem){
+            
+                        var childModelType = this.getChildModelTypeForRecordFn().call(this.getScope(), parentTreeItem.getRecord());
+                        var parentAttribute = this.getParentAttributeForChildRecordFn().call(this.getScope(), parentTreeItem.getRecord());
+            
+                        var storeConfig = this.getChildItemsStoreConfigForParentRecordFn().call(this.getScope(), parentTreeItem.getRecord());
+                        storeConfig = storeConfig || {};
+            
+                        storeConfig = Ext.applyIf(storeConfig, {
+                            model: childModelType,
+                            filters: [
+                                {
+                                    property: parentAttribute,
+                                    value: parentTreeItem.getRecord().get('_ref'),
+                                    operator: '='
+                                }
+                            ],
+                            sorters: [
+                                {
+                                    property: 'Rank',
+                                    direction: 'ASC'
+                                }
+                            ],
+                            context: {
+                                project: undefined
+                            }
+                        });
+                        
+            
+                        var childStore = Ext.create('Rally.data.WsapiDataStore', storeConfig);
+            
+                        childStore.on('load', function(store, records){
+                            this.drawItems(records, parentTreeItem);
+                        }, this);
+            
+                        childStore.load();
+            
+                    },
+            
+                    makeTreeItemDraggable: function(treeItem){
+                        var tree = this;
+            
+                        if(treeItem.getCanDrag()){
+                            var dragSource = Ext.create('Ext.dd.DragSource', treeItem.getEl(), {
+                                treeItem: treeItem,
+                                ddGroup: this.getDragDropGroupFn().call(this.getScope(), treeItem.getRecord()),
+                                isTarget: false,
+                                proxy: Ext.create('Ext.dd.StatusProxy', {
+                                    animRepair: true,
+                                    shadow: false,
+                                    dropNotAllowed: 'rallytree-proxy'
+                                })
+                            });
+            
+                            dragSource.setHandleElId(treeItem.getEl().down('.drag').id);
+                        }
+                        
+                        if(treeItem.getCanDropOnMe()){
+                            var dropTarget = Ext.create('Rally.ui.tree.TreeItemDropTarget', treeItem.down('#pill').getEl().down('div'), {
+                                tree: tree,
+                                treeItem: treeItem
+                            });
+            
+                            var dropTargetGroups = this.getDragThisGroupOnMeFn().call(this.getScope(), treeItem.getRecord());
+                            if(!Ext.isArray(dropTargetGroups)){
+                                dropTargetGroups = [dropTargetGroups];
+                            }
+                            Ext.each(dropTargetGroups, function(dropTargetGroup){
+                                dropTarget.addToGroup(dropTargetGroup);
+                            });
+                        }
+            
+                    },
+            
+                    removeTreeItem: function(treeItem){
+                        treeItem.destroy();
+                        if(this.query('rallytreeitem').length === 0){
+                            this.drawEmptyMsg();
+                        }
+                    },
+            
+                    expandItem: function(treeItem){
+                        treeItem.removeChildItems();
+                        this.drawChildItems(treeItem);
+                    },
+            
+                    collapseItem: function(treeItem){
+                        treeItem.removeChildItems();
+                    }
+            
+                });
+            
+            })();            Ext.define('PlanIterationsAndReleases.IterationTreeItem', {
+                extend: 'Rally.ui.tree.TreeItem',
+                alias: 'widget.rallyiterationtreeitem',
+                
+                getPillTpl: function(){
+                    var me = this;
+            
+                    return Ext.create('Ext.XTemplate',
+                        '<div class="pill">',
+                            '{[this.getActionsGear()]}',
+                            '<div class="textContent ellipses">{Name}</div>',
+                            '<div class="rightSide">',
+                                '{[this.getCapacity(values)]}',
+                            '</div>',
+                        '</div>',
+                        {
+                            getActionsGear: function(){
+                                return '<div class="row-action icon"></div>';
+                            },
+                            getCapacity: function(){
+                                return Ext.isDefined(me.getRecord().get('UserIterationCapacities'))? me.getRecord().render('UserIterationCapacities'): '';
+                            }
+                        }
+                    );
                 },
+                
+                getExpanderTpl: function(){
+                    return Ext.create('Ext.XTemplate', '');
+                }
+            });            Ext.define('PlanIterationsAndReleases.StoryTree', {
+                extend: 'Ext.Container',
+                
+                initComponent: function(){
+                    this.callParent(arguments);
+                    this.buildTree();
+                },
+                
+                buildTree: function(){
+                    var tree = Ext.widget('rallytree', {
+                        topLevelModel: 'PortfolioItem',
+                        enableDragAndDrop: true,
+                        childItemsStoreConfigForParentRecordFn: function(record){
+                            
+                            if(record.get('UserStories') && record.get('UserStories').length > 0){
+                                return {
+                                    filters: [
+                                        {
+                                            property: 'PortfolioItem',
+                                            value: record.get('_ref'),
+                                            operator: '='
+                                        },
+                                        {
+                                            property: 'Iteration',
+                                            value: 'null',
+                                            operator: '='
+                                        }
+                                    ]
+                                };
+                            }
+                        },
+                        childModelTypeForRecordFn: function(record){
+                            if(record.get('_type') === 'portfolioitem'){
+                                if(record.get('Children') && record.get('Children').length > 0){
+                                    return 'PortfolioItem';
+                                } else if(record.get('UserStories') && record.get('UserStories').length > 0){
+                                    return 'UserStory';
+                                }
+                            }
+                            if(record.get('_type') === 'hierarchicalrequirement'){
+                                return 'UserStory';
+                            }
+                            
             
-                buildStoryTree: function(){
-            	var tree = Ext.widget('rallytree', {
-            	    topLevelModel: 'PortfolioItem',
-            	    enableDragAndDrop: true,
-            
-            	    childModelTypeForRecordFn: function(record){
-            	    	if(record.get('Children') && record.get('Children').length > 0){
-            		    return 'PortfolioItem';
-            		} else if(record.get('UserStories') && record.get('UserStories').length > 0){
-            		   return 'UserStory';
-            		}
-                        	
-                   	    },
+                        },
                         parentAttributeForChildRecordFn: function(record){
                             if(record.get('Children') && record.get('Children').length > 0){
-            		    return 'Parent';
-            		} else if(record.get('UserStories') && record.get('UserStories').length > 0){
-            		   return 'PortfolioItem';
-            		}
+                                return 'Parent';
+                            } else if(record.get('UserStories') && record.get('UserStories').length > 0){
+                               return 'PortfolioItem';
+                            }
                         },
                         canExpandFn: function(record){
-                        	return (record.get('Children') && record.get('Children').length > 0) 
-            		|| (record.get('UserStories') && record.get('UserStories').length > 0);
+                            return (record.get('Children') && record.get('Children').length > 0) || 
+                            (record.get('UserStories') && record.get('UserStories').length > 0);
                         },
                         dragThisGroupOnMeFn: function(record){
                             return false;
-            	    }
-            	    
-            	});
+                        },
+                        treeItemConfigForRecordFn: function(record){
+                            var canDrag = record.get('_type') === 'hierarchicalrequirement' && record.get('Children').length === 0;
+                            
+                            return {
+                                canDrag: canDrag
+                            };
+                        }
             
-            	this.down('#leftSide').add(tree);
-            
+                    });
+                    
+                    this.add(tree);
+                }
+            });            Ext.define('PlanIterationsAndReleases.IterationsAndReleases', {
+                extend: 'Ext.Container',
+                
+                initComponent: function(){
+                    this.callParent(arguments);
+                    this.buildReleaseComboBox();
                 },
+                
+                buildReleaseComboBox: function(){
+                    this.releaseCombobox = Ext.widget('rallyreleasecombobox', {
+                        storeConfig: {
+                            filters: [{
+                                property: 'State',
+                                value: 'Accepted',
+                                operator: '!='
+                            }],
+                            sorters: [{
+                                property: 'ReleaseStartDate',
+                                direction: 'asc'
+                            }]
+                        },
             
+                        listeners: {
+                            ready: this.buildIterationTree,
+                            select: this.buildIterationTree,
+                            scope: this
+                        }
+                    });
+            
+                    this.add(this.releaseCombobox);
+                },
+                
                 buildIterationTree: function(){
             
-            	if(this.iterationTree){
-            	    this.iterationTree.destroy();
-            	}
+                    if(this.iterationTree){
+                        this.iterationTree.destroy();
+                    }
             
-            	var selectedRelease = this.releaseCombobox.getRecord();
+                    var selectedRelease = this.releaseCombobox.getRecord();
+                    
+                    var startDateFilter = Ext.create('Rally.data.QueryFilter', {
+                        property: 'StartDate',
+                        value: selectedRelease.raw.ReleaseStartDate,
+                        operator: '>='
+                    }).and({
+                        property: 'StartDate',
+                        value: selectedRelease.raw.ReleaseDate,
+                        operator: '<='
+                    });
+                    
+                    var endDateFilter = Ext.create('Rally.data.QueryFilter', {
+                        property: 'EndDate',
+                        value: selectedRelease.raw.ReleaseDate,
+                        operator: '<='
+                    }).and({
+                        property: 'EndDate',
+                        value: selectedRelease.raw.ReleaseStartDate,
+                        operator: '>='
+                    });
+                    
+                    var filter = startDateFilter.or(endDateFilter);
             
-            	this.iterationTree = Ext.widget('rallytree', {
-            	    topLevelModel: 'Iteration',
-            	    enableDragAndDrop: true,
+                    this.iterationTree = Ext.widget('rallytree', {
+                        topLevelModel: 'Iteration',
+                        enableDragAndDrop: true,
             
-            	    topLevelStoreConfig: {
-            		filters: [
-            		    {
-            		        property: 'StartDate',
-            		        value: selectedRelease.raw.ReleaseStartDate,
-            		        operator: '>='
-            		   },
-            		   {
-            		        property: 'EndDate',
-            		        value: selectedRelease.raw.ReleaseDate,
-            		        operator: '<='
-            		   }
-            		],
-            		sorters: []
-            	    },
+                        topLevelStoreConfig: {
+                            filters: filter,
+                            sorters: []
+                        },
             
-            	    childModelTypeForRecordFn: function(record){
-            	    	return 'UserStory';
-                        	
-                   	    },
+                        childModelTypeForRecordFn: function(record){
+                            return 'UserStory';
+                        },
                         parentAttributeForChildRecordFn: function(record){
                             return 'Iteration';
                         },
                         canExpandFn: function(record){
-            	    	if(record.get('_type') === 'iteration'){
-            		    return true;
-            		}
-                        	
-                        },
-            	    dragThisGroupOnMeFn: function(record){
                             if(record.get('_type') === 'iteration'){
-            		    return 'hierarchicalrequirement';
-            		}
-            	    }
-            	    
-            	});
+                                return true;
+                            }
+                        },
+                        dragThisGroupOnMeFn: function(record){
+                            if(record.get('_type') === 'iteration'){
+                                return 'hierarchicalrequirement';
+                            }
+                        },
+                        
+                        treeItemConfigForRecordFn: function(record){
+                            if(record.get('_type') === 'iteration'){
+                                return {
+                                    xtype: 'rallyiterationtreeitem',
+                                    canDrag: false,
+                                    canDropOnMe: true,
+                                    expanded: true
+                                };
+                            } else {
+                                return {
+                                    xtype: 'rallytreeitem',
+                                    canDrag: true
+                                }
+                            }
+                            
+                        }
+                    
+                    });
             
-            	this.down('#rightSide').add(this.iterationTree);
+                    this.add(this.iterationTree);
+                }
+                
+            });            Ext.define('PlanIterationsAndReleases.App', {
+                extend: 'Rally.app.App',
+                componentCls: 'app',
+            
+                items: [
+                    {
+                        xtype: 'container',
+                        cls: 'leftSide',
+                        itemId: 'leftSide'
+                    },
+                    {
+                        xtype: 'container',
+                        cls: 'rightSide',
+                        itemId: 'rightSide'
+                    }
+                ],
+            
+                launch: function() {
+                    this.buildStoryTree();
+                    this.buildIterationsAndReleases();
                 },
             
-                buildReleaseComboBox: function(){
-            	this.releaseCombobox = Ext.widget('rallyreleasecombobox', {
-            
-            	   storeConfig: {
-            		sorters: [{
-            		  property: 'ReleaseStartDate',
-            		  direction: 'asc'
-            	         }]
-            	    },
-            
-            	    listeners: {
-            		ready: this.buildIterationTree,
-            		select: this.buildIterationTree,
-            		scope: this
-            	    }
-            	});
-            
-            	this.down('#rightSide').add(this.releaseCombobox);
+                buildStoryTree: function(){
+                    var storyTree = Ext.create('PlanIterationsAndReleases.StoryTree');
+                    this.down('#leftSide').add(storyTree);
+                },
+                
+                buildIterationsAndReleases: function(){
+                    var iterationsAndReleases = Ext.create('PlanIterationsAndReleases.IterationsAndReleases');
+                    this.down('#rightSide').add(iterationsAndReleases);
                 }
             
             });
 
-            Rally.launchApp('Iterations', {
-                name: 'Iterations'
+            Rally.launchApp('PlanIterationsAndReleases.App', {
+                name: 'PlanIterationsAndReleases'
             });
         });
     </script>
 
     <style type="text/css">
+        
         .app {
-             /* Add app styles here */
+            margin: 10px auto;
+            width: 960px;
         }
-    </style>
+        
+        .app > .leftSide {
+            float: left;
+            width: 400px;
+            margin-right: 50px;
+        }
+        
+        .app > .rightSide {
+            float: left;
+            width: 400px;
+        }    </style>
 </head>
 <body></body>
 </html>
