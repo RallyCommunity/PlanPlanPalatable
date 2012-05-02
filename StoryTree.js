@@ -38,6 +38,23 @@ Ext.define('PlanIterationsAndReleases.StoryTree', {
                         ]
                     };
                 }
+                if(record.get('_type') === 'hierarchicalrequirement'){
+                    return {
+                        filters: [
+                            {
+                                property: 'Parent',
+                                value: record.get('_ref'),
+                                operator: '='
+                            },
+                            {
+                                property: 'Iteration',
+                                value: 'null',
+                                operator: '='
+                            }
+                        ]
+                    };
+                }
+                
             },
             childModelTypeForRecordFn: function(record){
                 if(record.get('_type') === 'portfolioitem'){

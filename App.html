@@ -807,7 +807,7 @@
                     return Ext.create('Ext.XTemplate',
                         '<div class="pill">',
                             '{[this.getActionsGear()]}',
-                            '<div class="textContent ellipses">{Name}</div>',
+                            '<div class="textContent ellipses">{Name} ({[this.getStartDate(values)]} - {[this.getEndDate(values)]})</div>',
                             '<div class="rightSide">',
                                 '{[this.getCapacity(values)]}',
                             '</div>',
@@ -825,6 +825,12 @@
                                 }
                                 
                                 return me.getCapacityTemplate().apply(recordData);
+                            },
+                            getStartDate: function(recordData){
+                                return Ext.Date.format(recordData.StartDate, 'F jS Y');
+                            },
+                            getEndDate: function(recordData){
+                                return Ext.Date.format(recordData.EndDate, 'F jS Y');
                             }
                         }
                     );
@@ -839,7 +845,7 @@
                         '<div class="percentDoneContainer">',
                             '<div class="percentDoneBar" style="background-color: {[this.calculateColor(values)]}; width: {[this.calculateWidth(values)]}; "></div>',
                             '<div class="percentDoneLabel">',
-                            '{[this.calculatePercent(values)]}',
+                            '{[this.displayValue(values)]}',
                             '</div>',
                         '</div>',
                         {
@@ -851,7 +857,10 @@
                                 if(percent > .8){
                                     return '#FBEDCA';
                                 }
-                                return '#3F84A4';
+                                return '#5C9ACB';
+                            },
+                            displayValue: function(recordData){
+                                return recordData.PlanEstimateRollup + '/' + recordData.Resources;
                             },
                             calculatePercent: function(recordData){
                                 return Math.round(recordData.PlanEstimateRollup/recordData.Resources*100) + '%';
@@ -881,6 +890,42 @@
                     
                     iterationRecord.set('PlanEstimateRollup', planEstimateRollup);
                     
+                }
+            });            Ext.define('PlanIterationsAndReleases.StoryTreeItem', {
+                extend: 'Rally.ui.tree.TreeItem',
+                alias: 'widget.rallystorytreeitem',
+                
+                getPillTpl: function(){
+                    var me = this;
+            
+                    return Ext.create('Ext.XTemplate',
+                        '<div class="pill">',
+                            '<tpl if="this.canDrag()"><div class="icon drag"></div></tpl>',
+                            '{[this.getActionsGear()]}',
+                            '<div class="textContent ellipses">{[this.getFormattedId()]} - {Name}</div>',
+                            '<div class="rightSide">',
+                                '{[this.getPlanEstimate(values)]}',
+                            '</div>',
+                        '</div>',
+                        {
+                            canDrag: function(){
+                                return me.getCanDrag();
+                            },
+                            getActionsGear: function(){
+                                return '<div class="row-action icon"></div>';
+                            },
+                            getFormattedId: function(){
+                                return me.getRecord().getField('FormattedID')? me.getRecord().render('FormattedID'): '';
+                            },
+                            getPlanEstimate: function(){
+                                if(me.getRecord().get('PlanEstimate') > 0){
+                                    return '<div class="planEstimate">' + me.getRecord().get('PlanEstimate') + '</div>';
+                                } else {
+                                    return '';
+                                }
+                            }
+                        }
+                    );
                 }
             });            Ext.define('PlanIterationsAndReleases.StoryTree', {
                 extend: 'Ext.Container',
@@ -922,6 +967,23 @@
                                     ]
                                 };
                             }
+                            if(record.get('_type') === 'hierarchicalrequirement'){
+                                return {
+                                    filters: [
+                                        {
+                                            property: 'Parent',
+                                            value: record.get('_ref'),
+                                            operator: '='
+                                        },
+                                        {
+                                            property: 'Iteration',
+                                            value: 'null',
+                                            operator: '='
+                                        }
+                                    ]
+                                };
+                            }
+                            
                         },
                         childModelTypeForRecordFn: function(record){
                             if(record.get('_type') === 'portfolioitem'){
@@ -1076,7 +1138,12 @@
             
                         topLevelStoreConfig: {
                             filters: filter,
-                            sorters: []
+                            sorters: [
+                                {
+                                    property: 'StartDate',
+                                    direction: 'asc'
+                                }
+                            ]
                         },
             
                         childModelTypeForRecordFn: function(record){
@@ -1104,11 +1171,13 @@
                                     canDropOnMe: true,
                                     expanded: true
                                 };
-                            } else {
+                            }
+                            
+                            if(record.get('_type') === 'hierarchicalrequirement'){
                                 return {
-                                    xtype: 'rallytreeitem',
+                                    xtype: 'rallystorytreeitem',
                                     canDrag: true
-                                }
+                                };
                             }
                             
                         },
@@ -1203,7 +1272,7 @@
         }
         
         .app {
-            margin: 10px;
+            margin: 10px 30px;
         }
         
         .app > .leftSide {
@@ -1230,6 +1299,14 @@
         .percentDoneContainer {
             height: 15px;
             line-height: 15px;
+        }
+        
+        .planEstimate {
+            width: 20px;
+            height: 20px;
+            border: 1px dotted #5C9ACB;
+            text-align: center;
+            margin-right: 4px;
         }    </style>
 </head>
 <body></body>
