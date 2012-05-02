@@ -16,14 +16,8 @@ Ext.define('PlanIterationsAndReleases.App', {
     ],
 
     launch: function() {
-        Rally.loadScripts([
-            'https://raw.github.com/timrwood/moment/1.6.1/min/moment.min.js'
-        ], Ext.bind(function(){
-            this.buildStoryTree();
-            this.buildIterationsAndReleases();
-        }, this));
-        
-        
+        this.buildStoryTree();
+        this.buildIterationsAndReleases();
     },
 
     buildStoryTree: function(){

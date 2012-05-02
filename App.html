@@ -737,7 +737,7 @@
                         var childStore = Ext.create('Rally.data.WsapiDataStore', storeConfig);
             
                         childStore.on('load', function(store, records){
-                            this.drawItems(records, parentTreeItem);
+                            this.drawItems(Ext.clone(records), parentTreeItem);
                         }, this);
             
                         childStore.load();
@@ -816,14 +816,15 @@
                             getActionsGear: function(){
                                 return '<div class="row-action icon"></div>';
                             },
-                            getCapacity: function(){
-                                return '';
-                                //TODO - we don't have rollup info about the stories in this iteration on the response.
+                            getCapacity: function(recordData){
                                 var resources = me.getRecord().get('Resources');
+                                var planEstimateRollup = me.getRecord().get('PlanEstimateRollup');
+            
                                 if(resources == 0){
                                     return '';
                                 }
-                                return resources;
+                                
+                                return me.getCapacityTemplate().apply(recordData);
                             }
                         }
                     );
@@ -831,6 +832,55 @@
                 
                 getExpanderTpl: function(){
                     return Ext.create('Ext.XTemplate', '');
+                },
+                
+                getCapacityTemplate: function(){
+                    return Ext.create('Ext.XTemplate', 
+                        '<div class="percentDoneContainer">',
+                            '<div class="percentDoneBar" style="background-color: {[this.calculateColor(values)]}; width: {[this.calculateWidth(values)]}; "></div>',
+                            '<div class="percentDoneLabel">',
+                            '{[this.calculatePercent(values)]}',
+                            '</div>',
+                        '</div>',
+                        {
+                            calculateColor: function(recordData){
+                                var percent = recordData.PlanEstimateRollup/recordData.Resources;
+                                if(percent > 1){
+                                    return '#EDB5B1';
+                                }
+                                if(percent > .8){
+                                    return '#FBEDCA';
+                                }
+                                return '#3F84A4';
+                            },
+                            calculatePercent: function(recordData){
+                                return Math.round(recordData.PlanEstimateRollup/recordData.Resources*100) + '%';
+                            },
+                            calculateWidth: function(recordData){
+                                var width = Math.round(recordData.PlanEstimateRollup/recordData.Resources*100);
+                                width = Math.min(width, 100);
+                                return width + '%';
+                            }
+                    });
+                },
+                
+                setRecord: function(record){
+                    this.updatePlanEstimateRollup(record);
+                    this.callParent(arguments);
+                },
+                
+                updatePlanEstimateRollup: function(iterationRecord){
+                    if(!this.rendered){
+                        return;
+                    }
+                    var planEstimateRollup = 0;
+                    var storyTreeItems = this.query('rallytreeitem');
+                    Ext.each(storyTreeItems, function(storyTreeItem){
+                        planEstimateRollup += storyTreeItem.getRecord().get('PlanEstimate');
+                    });
+                    
+                    iterationRecord.set('PlanEstimateRollup', planEstimateRollup);
+                    
                 }
             });            Ext.define('PlanIterationsAndReleases.StoryTree', {
                 extend: 'Ext.Container',
@@ -923,7 +973,25 @@
                         autoEl: 'h1',
                         html: 'Releases and Iterations'
                     });
-                    this.buildReleaseComboBox();
+                    
+                    this.enhanceIterationModel();
+                },
+                
+                enhanceIterationModel: function(){
+                    Rally.data.ModelFactory.getModel({
+                        type: 'Iteration',
+                        success: function(model){
+                            this.enhancedIterationModel = Ext.define('EnhancedIterationModel', {
+                                extend: model,
+                                fields: [
+                                    {name: 'PlanEstimateRollup', type: 'int', defaultValue: 0}
+                                ]
+                            });
+                            
+                            this.buildReleaseComboBox();
+                        },
+                        scope: this
+                    });
                 },
                 
                 buildReleaseComboBox: function(){
@@ -962,8 +1030,8 @@
                 
                 updateLabel: function(){
                     var release = this.releaseCombobox.getRecord();
-                    var startDate = moment(release.get('ReleaseStartDate')).format('MMMM Do YYYY');
-                    var endDate = moment(release.get('ReleaseDate')).format('MMMM Do YYYY');
+                    var startDate = Ext.Date.format(release.get('ReleaseStartDate'), 'F jS Y');
+                    var endDate = Ext.Date.format(release.get('ReleaseDate'), 'F jS Y');
                     var tpl = Ext.create('Ext.XTemplate', 'Showing iterations that begin or end within this release ({StartDate} - {EndDate})')
                     this.down('#releaseLabel').update(tpl.apply({
                         Name: release.get('Name'),
@@ -1003,7 +1071,7 @@
                     var filter = startDateFilter.or(endDateFilter);
             
                     this.iterationTree = Ext.widget('rallytree', {
-                        topLevelModel: 'Iteration',
+                        topLevelModel: this.enhancedIterationModel,
                         enableDragAndDrop: true,
             
                         topLevelStoreConfig: {
@@ -1043,11 +1111,50 @@
                                 }
                             }
                             
-                        }
+                        },
+                        
+                        childItemsStoreConfigForParentRecordFn: function(record){
+                            return {
+                                listeners: {
+                                    load: function(store, records){
+                                        this.updateRollupOnIterations(records);
+                                    },
+                                    scope: this
+                                }
+                            };
+                        },
+                        scope: this
                     
                     });
             
                     this.add(this.iterationTree);
+                },
+                
+                updateRollupOnIterations: function(records){
+                    if(records.length === 0){
+                        return;
+                    }
+                    
+                    //find the iteration tree item for the records
+                    var iterationTreeItem;
+                    Ext.each(this.query('rallyiterationtreeitem'), function(treeItem){
+                        if(treeItem.getRecord().get('_ref') === records[0].get('Iteration')._ref){
+                            iterationTreeItem = treeItem;
+                        }
+                    });
+            
+                    //rollup plan estimate
+                    var planEstimateRollup = 0;
+                    Ext.each(records, function(record){
+                        planEstimateRollup += record.get('PlanEstimate');
+                    });
+                    
+                    //update iteration
+                    iterationTreeItem.getRecord().set('PlanEstimateRollup', planEstimateRollup);
+                    
+                    //redraw iteration
+                    iterationTreeItem.draw();
+                    
                 }
                 
             });            Ext.define('PlanIterationsAndReleases.App', {
@@ -1068,14 +1175,8 @@
                 ],
             
                 launch: function() {
-                    Rally.loadScripts([
-                        'https://raw.github.com/timrwood/moment/1.6.1/min/moment.min.js'
-                    ], Ext.bind(function(){
-                        this.buildStoryTree();
-                        this.buildIterationsAndReleases();
-                    }, this));
-                    
-                    
+                    this.buildStoryTree();
+                    this.buildIterationsAndReleases();
                 },
             
                 buildStoryTree: function(){
@@ -1123,6 +1224,12 @@
         .grayLabel {
             color: #888;
             margin: 5px 15px;
+        }
+        
+        
+        .percentDoneContainer {
+            height: 15px;
+            line-height: 15px;
         }    </style>
 </head>
 <body></body>

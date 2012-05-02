@@ -38,10 +38,10 @@ Ext.define('PlanIterationsAndReleases.IterationTreeItem', {
     getCapacityTemplate: function(){
         return Ext.create('Ext.XTemplate', 
             '<div class="percentDoneContainer">',
-            '<div class="percentDoneBar" style="background-color: {[this.calculateColor(values)]}; width: {[this.calculateWidth(values)]}; "></div>',
-            '<div class="percentDoneLabel">',
-            '{[this.calculatePercent(values)]}',
-            '</div>',
+                '<div class="percentDoneBar" style="background-color: {[this.calculateColor(values)]}; width: {[this.calculateWidth(values)]}; "></div>',
+                '<div class="percentDoneLabel">',
+                '{[this.displayValue(values)]}',
+                '</div>',
             '</div>',
             {
                 calculateColor: function(recordData){
@@ -52,7 +52,10 @@ Ext.define('PlanIterationsAndReleases.IterationTreeItem', {
                     if(percent > .8){
                         return '#FBEDCA';
                     }
-                    return '#3F84A4';
+                    return '#B5D8EB';
+                },
+                displayValue: function(recordData){
+                    return recordData.PlanEstimateRollup + '/' + recordData.Resources;
                 },
                 calculatePercent: function(recordData){
                     return Math.round(recordData.PlanEstimateRollup/recordData.Resources*100) + '%';
@@ -63,5 +66,24 @@ Ext.define('PlanIterationsAndReleases.IterationTreeItem', {
                     return width + '%';
                 }
         });
+    },
+    
+    setRecord: function(record){
+        this.updatePlanEstimateRollup(record);
+        this.callParent(arguments);
+    },
+    
+    updatePlanEstimateRollup: function(iterationRecord){
+        if(!this.rendered){
+            return;
+        }
+        var planEstimateRollup = 0;
+        var storyTreeItems = this.query('rallytreeitem');
+        Ext.each(storyTreeItems, function(storyTreeItem){
+            planEstimateRollup += storyTreeItem.getRecord().get('PlanEstimate');
+        });
+        
+        iterationRecord.set('PlanEstimateRollup', planEstimateRollup);
+        
     }
 });

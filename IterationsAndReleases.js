@@ -65,8 +65,8 @@ Ext.define('PlanIterationsAndReleases.IterationsAndReleases', {
     
     updateLabel: function(){
         var release = this.releaseCombobox.getRecord();
-        var startDate = moment(release.get('ReleaseStartDate')).format('MMMM Do YYYY');
-        var endDate = moment(release.get('ReleaseDate')).format('MMMM Do YYYY');
+        var startDate = Ext.Date.format(release.get('ReleaseStartDate'), 'F jS Y');
+        var endDate = Ext.Date.format(release.get('ReleaseDate'), 'F jS Y');
         var tpl = Ext.create('Ext.XTemplate', 'Showing iterations that begin or end within this release ({StartDate} - {EndDate})')
         this.down('#releaseLabel').update(tpl.apply({
             Name: release.get('Name'),
@@ -111,7 +111,12 @@ Ext.define('PlanIterationsAndReleases.IterationsAndReleases', {
 
             topLevelStoreConfig: {
                 filters: filter,
-                sorters: []
+                sorters: [
+                    {
+                        property: 'StartDate',
+                        direction: 'asc'
+                    }
+                ]
             },
 
             childModelTypeForRecordFn: function(record){
