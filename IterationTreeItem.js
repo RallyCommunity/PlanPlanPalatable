@@ -8,7 +8,7 @@ Ext.define('PlanIterationsAndReleases.IterationTreeItem', {
         return Ext.create('Ext.XTemplate',
             '<div class="pill">',
                 '{[this.getActionsGear()]}',
-                '<div class="textContent ellipses">{Name}</div>',
+                '<div class="textContent ellipses">{Name} ({[this.getStartDate(values)]} - {[this.getEndDate(values)]})</div>',
                 '<div class="rightSide">',
                     '{[this.getCapacity(values)]}',
                 '</div>',
@@ -26,6 +26,12 @@ Ext.define('PlanIterationsAndReleases.IterationTreeItem', {
                     }
                     
                     return me.getCapacityTemplate().apply(recordData);
+                },
+                getStartDate: function(recordData){
+                    return Ext.Date.format(recordData.StartDate, 'F jS Y');
+                },
+                getEndDate: function(recordData){
+                    return Ext.Date.format(recordData.EndDate, 'F jS Y');
                 }
             }
         );
