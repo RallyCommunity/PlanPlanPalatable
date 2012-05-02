@@ -3,6 +3,7 @@
     "className": "PlanIterationsAndReleases.App",
     "sdk": "2.0p",
     "javascript": [
+		"libs/moment.min.js",
 		"TreeItem.js",
         "Tree.js",
 		"IterationTreeItem.js",

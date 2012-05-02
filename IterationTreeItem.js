@@ -19,7 +19,12 @@ Ext.define('PlanIterationsAndReleases.IterationTreeItem', {
                 },
                 getCapacity: function(){
                     return '';
-                    //return Ext.isDefined(me.getRecord().get('UserIterationCapacities'))? me.getRecord().render('UserIterationCapacities'): '';
+                    //TODO - we don't have rollup info about the stories in this iteration on the response.
+                    var resources = me.getRecord().get('Resources');
+                    if(resources == 0){
+                        return '';
+                    }
+                    return resources;
                 }
             }
         );

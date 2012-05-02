@@ -1,16 +1,24 @@
 
 .app {
-    margin: 10px auto;
-    width: 960px;
+    margin: 10px;
 }
 
 .app > .leftSide {
     float: left;
-    width: 400px;
-    margin-right: 50px;
+    width: 45%;
 }
 
 .app > .rightSide {
-    float: left;
-    width: 400px;
+    float: right;
+    width: 45%;
+}
+
+h1 {
+    font-size: 14px;
+    margin: 5px;
+}
+
+.grayLabel {
+    color: #888;
+    margin: 5px 15px;
 }

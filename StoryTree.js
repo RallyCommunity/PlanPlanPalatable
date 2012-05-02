@@ -3,6 +3,16 @@ Ext.define('PlanIterationsAndReleases.StoryTree', {
     
     initComponent: function(){
         this.callParent(arguments);
+        this.add({
+            xtype: 'component',
+            autoEl: 'h1',
+            html: 'Unscheduled Story Hierarchy'
+        });
+        this.add({
+            xtype: 'component',
+            cls: 'grayLabel',
+            html: 'Drill down to see unscheduled leaf user stories. Drag and drop into an iteration on the right.'
+        });
         this.buildTree();
     },
     

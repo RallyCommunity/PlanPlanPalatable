@@ -3,6 +3,11 @@ Ext.define('PlanIterationsAndReleases.IterationsAndReleases', {
     
     initComponent: function(){
         this.callParent(arguments);
+        this.add({
+            xtype: 'component',
+            autoEl: 'h1',
+            html: 'Releases and Iterations'
+        });
         this.buildReleaseComboBox();
     },
     
@@ -21,13 +26,35 @@ Ext.define('PlanIterationsAndReleases.IterationsAndReleases', {
             },
 
             listeners: {
-                ready: this.buildIterationTree,
-                select: this.buildIterationTree,
+                ready: this.releaseSelected,
+                select: this.releaseSelected,
                 scope: this
             }
         });
 
         this.add(this.releaseCombobox);
+        this.add({
+            xtype: 'component',
+            itemId: 'releaseLabel',
+            cls: 'grayLabel'
+        });
+    },
+    
+    releaseSelected: function(){
+        this.updateLabel();
+        this.buildIterationTree();
+    },
+    
+    updateLabel: function(){
+        var release = this.releaseCombobox.getRecord();
+        var startDate = moment(release.get('ReleaseStartDate')).format('MMMM Do YYYY');
+        var endDate = moment(release.get('ReleaseDate')).format('MMMM Do YYYY');
+        var tpl = Ext.create('Ext.XTemplate', 'Showing iterations that begin or end within this release ({StartDate} - {EndDate})')
+        this.down('#releaseLabel').update(tpl.apply({
+            Name: release.get('Name'),
+            StartDate: startDate,
+            EndDate: endDate
+        }));
     },
     
     buildIterationTree: function(){

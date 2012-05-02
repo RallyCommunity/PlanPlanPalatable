@@ -817,7 +817,8 @@
                                 return '<div class="row-action icon"></div>';
                             },
                             getCapacity: function(){
-                                return Ext.isDefined(me.getRecord().get('UserIterationCapacities'))? me.getRecord().render('UserIterationCapacities'): '';
+                                return '';
+                                //return Ext.isDefined(me.getRecord().get('UserIterationCapacities'))? me.getRecord().render('UserIterationCapacities'): '';
                             }
                         }
                     );
@@ -1050,19 +1051,17 @@
     <style type="text/css">
         
         .app {
-            margin: 10px auto;
-            width: 960px;
+            margin: 10px;
         }
         
         .app > .leftSide {
             float: left;
-            width: 400px;
-            margin-right: 50px;
+            width: 45%;
         }
         
         .app > .rightSide {
-            float: left;
-            width: 400px;
+            float: right;
+            width: 45%;
         }    </style>
 </head>
 <body></body>
