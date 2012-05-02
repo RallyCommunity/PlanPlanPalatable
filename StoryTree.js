@@ -87,9 +87,13 @@ Ext.define('PlanIterationsAndReleases.StoryTree', {
             treeItemConfigForRecordFn: function(record){
                 var canDrag = record.get('_type') === 'hierarchicalrequirement' && record.get('Children').length === 0;
                 
-                return {
+                var config = {
                     canDrag: canDrag
                 };
+                if(record.get('_type') === 'hierarchicalrequirement'){
+                    config.xtype = 'rallystorytreeitem';
+                }
+                return config;
             }
 
         });
