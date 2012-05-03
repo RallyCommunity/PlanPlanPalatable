@@ -38,4 +38,7 @@ h1 {
     border: 1px dotted #5C9ACB;
     text-align: center;
     margin-right: 4px;
+    position: absolute;
+    top: 5px;
+    right: 3px;
 }
