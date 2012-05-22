@@ -180,7 +180,7 @@ Ext.define('PlanIterationsAndReleases.IterationsAndReleases', {
         //find the iteration tree item for the records
         var iterationTreeItem;
         Ext.each(this.query('rallyiterationtreeitem'), function(treeItem){
-            if(treeItem.getRecord().get('_ref') === records[0].get('Iteration')._ref){
+            if(treeItem.getRecord().get('Name') === records[0].get('Iteration')._refObjectName){
                 iterationTreeItem = treeItem;
             }
         });
