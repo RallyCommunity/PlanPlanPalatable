@@ -5,7 +5,7 @@ Built as part of the 2012 RallyON! Hackathon.
 
 See a screencast here: http://screencast.com/t/VaazH05Ryas
 
-To use in Rally, copy the content of App.html into a "Custom HTML" app in Rally.
+To use in Rally, copy the content of [App.html](https://github.com/downloads/RallyCommunity/PlanPlanPalatable/App.html.zip) into a "Custom HTML" app in Rally.
 	
 To modify and rebuild, use these rake tasks:
 
