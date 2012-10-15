@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PlanPlanPalatable</title>
+
+    <script type="text/javascript" src="/apps/2.0p4/sdk.js"></script>
+
+    <script type="text/javascript">
+        Rally.onReady(function() {
+            Ext.define('PlanIterationsAndReleases.StoryTree', {
+                extend: 'Ext.Container',
+                
+                initComponent: function(){
+                    this.callParent(arguments);
+                    this.add({
+                        xtype: 'component',
+                        autoEl: 'h1',
+                        html: 'Unscheduled Story Hierarchy'
+                    });
+                    this.add({
+                        xtype: 'component',
+                        cls: 'grayLabel',
+                        html: 'Drill down to see unscheduled leaf user stories. Drag and drop into an iteration on the right.'
+                    });
+                    this.buildTree();
+                },
+                
+                buildTree: function(){
+            
+                    Rally.data.util.PortfolioItemHelper.loadTypeOrDefault({
+                        success: function(typeRecord){
+            
+                            var tree = Ext.widget('rallyportfoliotree', {
+                                topLevelModel: typeRecord.get('TypePath'),
+                                treeItemConfigForRecordFn: function(record){
+                                    var canDrag = record.get('_type') === 'hierarchicalrequirement' && record.get('Children').length === 0;
+                                    
+                                    var config = {
+                                        canDrag: canDrag
+                                    };
+                                    if(record.get('_type') === 'hierarchicalrequirement'){
+                                        config.xtype = 'rallystorytreeitem';
+                                    }
+                                    return config;
+                                }
+                            });
+            
+                            this.add(tree);
+            
+                        },
+                        scope: this
+                    });
+            
+                    
+                }
+            });            Ext.define('PlanIterationsAndReleases.StoryTreeItem', {
+                extend: 'Rally.ui.tree.TreeItem',
+                alias: 'widget.rallystorytreeitem',
+                
+                getPillTpl: function(){
+                    var me = this;
+            
+                    return Ext.create('Ext.XTemplate',
+                        '<div class="pill">',
+                            '<tpl if="this.canDrag()"><div class="icon drag"></div></tpl>',
+                            '{[this.getActionsGear()]}',
+                            '<div class="textContent ellipses">{[this.getFormattedId()]} - {Name}</div>',
+                            '<div class="rightSide">',
+                                '{[this.getPlanEstimate(values)]}',
+                            '</div>',
+                        '</div>',
+                        {
+                            canDrag: function(){
+                                return me.getCanDrag();
+                            },
+                            getActionsGear: function(){
+                                return '<div class="row-action icon"></div>';
+                            },
+                            getFormattedId: function(){
+                                return me.getRecord().getField('FormattedID')? me.getRecord().render('FormattedID'): '';
+                            },
+                            getPlanEstimate: function(){
+                                if(me.getRecord().get('PlanEstimate') > 0){
+                                    return '<div class="planEstimate">' + me.getRecord().get('PlanEstimate') + '</div>';
+                                } else {
+                                    return '';
+                                }
+                            }
+                        }
+                    );
+                }
+            });            Ext.define('PlanIterationsAndReleases.IterationTreeItem', {
+                extend: 'Rally.ui.tree.TreeItem',
+                alias: 'widget.rallyiterationtreeitem',
+                
+                getPillTpl: function(){
+                    var me = this;
+            
+                    return Ext.create('Ext.XTemplate',
+                        '<div class="pill">',
+                            '{[this.getActionsGear()]}',
+                            '<div class="textContent ellipses">{Name} ({[this.getStartDate(values)]} - {[this.getEndDate(values)]})</div>',
+                            '<div class="rightSide">',
+                                '{[this.getCapacity(values)]}',
+                            '</div>',
+                        '</div>',
+                        {
+                            getActionsGear: function(){
+                                return '<div class="row-action icon"></div>';
+                            },
+                            getCapacity: function(recordData){
+                                var resources = me.getRecord().get('Resources');
+                                var planEstimateRollup = me.getRecord().get('PlanEstimateRollup');
+            
+                                if(resources == 0){
+                                    return '';
+                                }
+                                
+                                return me.getCapacityTemplate().apply(recordData);
+                            },
+                            getStartDate: function(recordData){
+                                return Ext.Date.format(recordData.StartDate, 'F jS Y');
+                            },
+                            getEndDate: function(recordData){
+                                return Ext.Date.format(recordData.EndDate, 'F jS Y');
+                            }
+                        }
+                    );
+                },
+                
+                getExpanderTpl: function(){
+                    return Ext.create('Ext.XTemplate', '');
+                },
+                
+                getCapacityTemplate: function(){
+                    return Ext.create('Ext.XTemplate', 
+                        '<div class="percentDoneContainer">',
+                            '<div class="percentDoneBar" style="background-color: {[this.calculateColor(values)]}; width: {[this.calculateWidth(values)]}; "></div>',
+                            '<div class="percentDoneLabel">',
+                            '{[this.displayValue(values)]}',
+                            '</div>',
+                        '</div>',
+                        {
+                            calculateColor: function(recordData){
+                                var percent = recordData.PlanEstimateRollup/recordData.Resources;
+                                if(percent > 1){
+                                    return '#EDB5B1';
+                                }
+                                if(percent > .8){
+                                    return '#FBEDCA';
+                                }
+                                return '#5C9ACB';
+                            },
+                            displayValue: function(recordData){
+                                return recordData.PlanEstimateRollup + '/' + recordData.Resources;
+                            },
+                            calculatePercent: function(recordData){
+                                return Math.round(recordData.PlanEstimateRollup/recordData.Resources*100) + '%';
+                            },
+                            calculateWidth: function(recordData){
+                                var width = Math.round(recordData.PlanEstimateRollup/recordData.Resources*100);
+                                width = Math.min(width, 100);
+                                return width + '%';
+                            }
+                    });
+                },
+                
+                setRecord: function(record){
+                    this.updatePlanEstimateRollup(record);
+                    this.callParent(arguments);
+                },
+                
+                updatePlanEstimateRollup: function(iterationRecord){
+                    if(!this.rendered){
+                        return;
+                    }
+                    var planEstimateRollup = 0;
+                    var storyTreeItems = this.query('rallytreeitem');
+                    Ext.each(storyTreeItems, function(storyTreeItem){
+                        planEstimateRollup += storyTreeItem.getRecord().get('PlanEstimate');
+                    });
+                    
+                    iterationRecord.set('PlanEstimateRollup', planEstimateRollup);
+                    
+                }
+            });            Ext.define('PlanIterationsAndReleases.IterationsAndReleases', {
+                extend: 'Ext.Container',
+                
+                initComponent: function(){
+                    this.callParent(arguments);
+                    this.add({
+                        xtype: 'component',
+                        autoEl: 'h1',
+                        html: 'Releases and Iterations'
+                    });
+                    
+                    this.enhanceIterationModel();
+                },
+                
+                enhanceIterationModel: function(){
+                    Rally.data.ModelFactory.getModel({
+                        type: 'Iteration',
+                        success: function(model){
+                            this.enhancedIterationModel = Ext.define('EnhancedIterationModel', {
+                                extend: model,
+                                fields: [
+                                    {name: 'PlanEstimateRollup', type: 'int', defaultValue: 0}
+                                ]
+                            });
+                            
+                            this.buildReleaseComboBox();
+                        },
+                        scope: this
+                    });
+                },
+                
+                buildReleaseComboBox: function(){
+                    this.releaseCombobox = Ext.widget('rallyreleasecombobox', {
+                        storeConfig: {
+                            filters: [{
+                                property: 'State',
+                                value: 'Accepted',
+                                operator: '!='
+                            }],
+                            sorters: [{
+                                property: 'ReleaseStartDate',
+                                direction: 'asc'
+                            }]
+                        },
+            
+                        listeners: {
+                            ready: this.releaseSelected,
+                            select: this.releaseSelected,
+                            scope: this
+                        }
+                    });
+            
+                    this.add(this.releaseCombobox);
+                    this.add({
+                        xtype: 'component',
+                        itemId: 'releaseLabel',
+                        cls: 'grayLabel'
+                    });
+                },
+                
+                releaseSelected: function(){
+                    this.updateLabel();
+                    this.buildIterationTree();
+                },
+                
+                updateLabel: function(){
+                    var release = this.releaseCombobox.getRecord();
+                    var startDate = Ext.Date.format(release.get('ReleaseStartDate'), 'F jS Y');
+                    var endDate = Ext.Date.format(release.get('ReleaseDate'), 'F jS Y');
+                    var tpl = Ext.create('Ext.XTemplate', 'Showing iterations that begin or end within this release ({StartDate} - {EndDate})')
+                    this.down('#releaseLabel').update(tpl.apply({
+                        Name: release.get('Name'),
+                        StartDate: startDate,
+                        EndDate: endDate
+                    }));
+                },
+                
+                buildIterationTree: function(){
+            
+                    if(this.iterationTree){
+                        this.iterationTree.destroy();
+                    }
+            
+                    var selectedRelease = this.releaseCombobox.getRecord();
+                    
+                    var startDateFilter = Ext.create('Rally.data.QueryFilter', {
+                        property: 'StartDate',
+                        value: selectedRelease.raw.ReleaseStartDate,
+                        operator: '>='
+                    }).and({
+                        property: 'StartDate',
+                        value: selectedRelease.raw.ReleaseDate,
+                        operator: '<='
+                    });
+                    
+                    var endDateFilter = Ext.create('Rally.data.QueryFilter', {
+                        property: 'EndDate',
+                        value: selectedRelease.raw.ReleaseDate,
+                        operator: '<='
+                    }).and({
+                        property: 'EndDate',
+                        value: selectedRelease.raw.ReleaseStartDate,
+                        operator: '>='
+                    });
+                    
+                    var filter = startDateFilter.or(endDateFilter);
+            
+                    this.iterationTree = Ext.widget('rallytree', {
+                        topLevelModel: this.enhancedIterationModel,
+                        enableDragAndDrop: true,
+            
+                        topLevelStoreConfig: {
+                            filters: filter,
+                            sorters: [
+                                {
+                                    property: 'StartDate',
+                                    direction: 'asc'
+                                }
+                            ]
+                        },
+            
+                        childModelTypeForRecordFn: function(record){
+                            return 'UserStory';
+                        },
+                        parentAttributeForChildRecordFn: function(record){
+                            return 'Iteration';
+                        },
+                        canExpandFn: function(record){
+                            if(record.get('_type') === 'iteration'){
+                                return true;
+                            }
+                        },
+                        dragThisGroupOnMeFn: function(record){
+                            if(record.get('_type') === 'iteration'){
+                                return 'hierarchicalrequirement';
+                            }
+                        },
+                        
+                        treeItemConfigForRecordFn: function(record){
+                            if(record.get('_type') === 'iteration'){
+                                return {
+                                    xtype: 'rallyiterationtreeitem',
+                                    canDrag: false,
+                                    canDropOnMe: true,
+                                    expanded: true
+                                };
+                            }
+                            
+                            if(record.get('_type') === 'hierarchicalrequirement'){
+                                return {
+                                    xtype: 'rallystorytreeitem',
+                                    canDrag: true
+                                };
+                            }
+                            
+                        },
+                        
+                        childItemsStoreConfigForParentRecordFn: function(record){
+                            return {
+                                listeners: {
+                                    load: function(store, records){
+                                        this.updateRollupOnIterations(records);
+                                    },
+                                    scope: this
+                                }
+                            };
+                        },
+                        scope: this
+                    
+                    });
+            
+                    this.add(this.iterationTree);
+                },
+                
+                updateRollupOnIterations: function(records){
+                    if(records.length === 0){
+                        return;
+                    }
+                    
+                    //find the iteration tree item for the records
+                    var iterationTreeItem;
+                    Ext.each(this.query('rallyiterationtreeitem'), function(treeItem){
+                        if(treeItem.getRecord().get('Name') === records[0].get('Iteration')._refObjectName){
+                            iterationTreeItem = treeItem;
+                        }
+                    });
+            
+                    //rollup plan estimate
+                    var planEstimateRollup = 0;
+                    Ext.each(records, function(record){
+                        planEstimateRollup += record.get('PlanEstimate');
+                    });
+                    
+                    //update iteration
+                    iterationTreeItem.getRecord().set('PlanEstimateRollup', planEstimateRollup);
+                    
+                    //redraw iteration
+                    iterationTreeItem.draw();
+                    
+                }
+                
+            });            Ext.define('PlanPlanPalatable', {
+                extend: 'Rally.app.App',
+                componentCls: 'app',
+            
+                items: [
+                    {
+                        xtype: 'container',
+                        cls: 'leftSide',
+                        itemId: 'leftSide'
+                    },
+                    {
+                        xtype: 'container',
+                        cls: 'rightSide',
+                        itemId: 'rightSide'
+                    }
+                ],
+            
+                launch: function() {
+                    this.buildStoryTree();
+                    this.buildIterationsAndReleases();
+                },
+            
+                buildStoryTree: function(){
+                    var storyTree = Ext.create('PlanIterationsAndReleases.StoryTree');
+                    this.down('#leftSide').add(storyTree);
+                },
+                
+                buildIterationsAndReleases: function(){
+                    var iterationsAndReleases = Ext.create('PlanIterationsAndReleases.IterationsAndReleases');
+                    this.down('#rightSide').add(iterationsAndReleases);
+                }
+            
+            });
+
+            Rally.launchApp('PlanPlanPalatable', {
+                name: 'PlanPlanPalatable'
+            });
+        });
+    </script>
+
+    <style type="text/css">
+        body {
+            overflow-y: auto !important;
+        }
+        
+        .app {
+            margin: 10px 30px;
+        }
+        
+        .app > .leftSide {
+            float: left;
+            width: 45%;
+        }
+        
+        .app > .rightSide {
+            float: right;
+            width: 45%;
+        }
+        
+        h1 {
+            font-size: 14px;
+            margin: 5px;
+        }
+        
+        .grayLabel {
+            color: #888;
+            margin: 5px 15px;
+        }
+        
+        
+        .percentDoneContainer {
+            height: 15px;
+            line-height: 15px;
+        }
+        
+        .planEstimate {
+            width: 20px;
+            height: 20px;
+            border: 1px dotted #5C9ACB;
+            text-align: center;
+            margin-right: 4px;
+            position: absolute;
+            top: 5px;
+            right: 3px;
+        }    </style>
+</head>
+<body></body>
+</html>
