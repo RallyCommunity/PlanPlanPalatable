@@ -1,7 +1,7 @@
 {
     "name": "PlanPlanPalatable",
     "className": "PlanPlanPalatable",
-    "server": "https://test11cluster.rallydev.com",
+    "server": "https://rally1.rallydev.com",
     "sdk": "2.0p4",
     "javascript": [
     	"StoryTree.js",
