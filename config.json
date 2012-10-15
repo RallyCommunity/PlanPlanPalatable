@@ -1,14 +1,13 @@
 {
-    "name": "PlanIterationsAndReleases",
-    "className": "PlanIterationsAndReleases.App",
-    "sdk": "2.0p",
+    "name": "PlanPlanPalatable",
+    "className": "PlanPlanPalatable",
+    "server": "https://test11cluster.rallydev.com",
+    "sdk": "2.0p4",
     "javascript": [
-		"TreeItem.js",
-        "Tree.js",
-		"IterationTreeItem.js",
-		"StoryTreeItem.js",
-        "StoryTree.js",
-        "IterationsAndReleases.js",
+    	"StoryTree.js",
+    	"StoryTreeItem.js",
+    	"IterationTreeItem.js",
+    	"IterationsAndReleases.js",
         "App.js"
     ],
     "css": [

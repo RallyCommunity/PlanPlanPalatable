@@ -1,4 +1,4 @@
-Ext.define('PlanIterationsAndReleases.App', {
+Ext.define('PlanPlanPalatable', {
     extend: 'Rally.app.App',
     componentCls: 'app',
 
