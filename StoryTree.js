@@ -31,6 +31,8 @@ Ext.define('PlanIterationsAndReleases.StoryTree', {
                         };
                         if(record.get('_type') === 'hierarchicalrequirement'){
                             config.xtype = 'rallystorytreeitem';
+                        } else {
+                            config.xtype = 'rallyportfolioitemtreeitem';
                         }
                         return config;
                     }
