@@ -156,13 +156,31 @@ Ext.define('PlanIterationsAndReleases.IterationsAndReleases', {
             },
             
             childItemsStoreConfigForParentRecordFn: function(record){
+                var releaseFilter = Ext.create('Rally.data.QueryFilter', {
+                    property: 'Release',
+                    value: selectedRelease.get('_ref')
+                });
+
+                var noReleaseFilter = Ext.create('Rally.data.QueryFilter', {
+                    property: 'Release',
+                    value: 'null'
+                });
+
+                var iterationFilter = Ext.create('Rally.data.QueryFilter', {
+                    property: 'Iteration',
+                    value: record.get('_ref')
+                });
+
+                var filter = (releaseFilter.or(noReleaseFilter)).and(iterationFilter);
+
                 return {
                     listeners: {
                         load: function(store, records){
                             this.updateRollupOnIterations(records);
                         },
                         scope: this
-                    }
+                    },
+                    filters: filter
                 };
             },
             scope: this
