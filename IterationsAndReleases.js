@@ -161,17 +161,12 @@ Ext.define('PlanIterationsAndReleases.IterationsAndReleases', {
                     value: selectedRelease.get('_ref')
                 });
 
-                var noReleaseFilter = Ext.create('Rally.data.QueryFilter', {
-                    property: 'Release',
-                    value: 'null'
-                });
-
                 var iterationFilter = Ext.create('Rally.data.QueryFilter', {
                     property: 'Iteration',
                     value: record.get('_ref')
                 });
 
-                var filter = (releaseFilter.or(noReleaseFilter)).and(iterationFilter);
+                var filter = releaseFilter.and(iterationFilter);
 
                 return {
                     listeners: {
